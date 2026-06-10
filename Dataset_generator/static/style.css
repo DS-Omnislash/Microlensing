@@ -1,0 +1,236 @@
+:root {
+    --accent: #2c5f8a;
+    --accent-light: #e8f1f8;
+    --border: #d8dee4;
+    --bg: #f6f8fa;
+    --ok: #1a7f37;
+    --check: #b35900;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    margin: 0;
+    background: var(--bg);
+    color: #1f2937;
+    line-height: 1.5;
+}
+
+header {
+    background: var(--accent);
+    color: white;
+    padding: 1.5rem 2rem;
+}
+
+header h1 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.6rem;
+}
+
+header p {
+    margin: 0;
+    max-width: 70rem;
+}
+
+main {
+    max-width: 70rem;
+    margin: 1.5rem auto;
+    padding: 0 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+}
+
+.card h2 {
+    margin-top: 0;
+    border-bottom: 2px solid var(--accent-light);
+    padding-bottom: 0.5rem;
+}
+
+.field {
+    margin-bottom: 1.25rem;
+}
+
+.field label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.recommended {
+    font-weight: normal;
+    color: var(--accent);
+    font-size: 0.85rem;
+}
+
+.field input[type="number"] {
+    width: 10rem;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+.range-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.range-row input[type="range"] {
+    flex: 1;
+}
+
+.range-row input[type="number"] {
+    width: 6rem;
+}
+
+.hint {
+    margin: 0.4rem 0 0 0;
+    font-size: 0.85rem;
+    color: #57606a;
+}
+
+.summary-preview {
+    font-weight: 600;
+    color: var(--accent);
+}
+
+button, .button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 0.6rem 1.2rem;
+    font-size: 1rem;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+}
+
+button:hover, .button:hover {
+    background: #1f496c;
+}
+
+button:disabled {
+    background: #9aa5b1;
+    cursor: not-allowed;
+}
+
+.status {
+    margin-top: 0.75rem;
+    font-style: italic;
+    color: #57606a;
+}
+
+.status.error {
+    color: #b91c1c;
+    font-style: normal;
+    font-weight: 600;
+}
+
+.plot-block {
+    margin: 1.5rem 0;
+}
+
+.plot-block h3 {
+    margin-bottom: 0.5rem;
+}
+
+.plot {
+    max-width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
+.actions {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin-top: 1rem;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.75rem;
+    font-size: 0.9rem;
+}
+
+th, td {
+    border: 1px solid var(--border);
+    padding: 0.5rem 0.6rem;
+    text-align: left;
+    vertical-align: top;
+}
+
+th {
+    background: var(--accent-light);
+}
+
+.status-ok {
+    color: var(--ok);
+    font-weight: 700;
+}
+
+.status-check {
+    color: var(--check);
+    font-weight: 700;
+}
+
+.param-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.param-card {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.85rem 1rem;
+    background: var(--bg);
+}
+
+.param-card h4 {
+    margin: 0 0 0.4rem 0;
+    color: var(--accent);
+}
+
+.param-meta {
+    margin: 0.15rem 0;
+    font-size: 0.85rem;
+}
+
+.param-formula {
+    font-family: "Cascadia Code", Consolas, monospace;
+    font-size: 0.8rem;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.35rem 0.5rem;
+    overflow-x: auto;
+}
+
+.param-ref {
+    font-size: 0.8rem;
+    color: #57606a;
+    margin-bottom: 0;
+}
+
+footer {
+    text-align: center;
+    color: #57606a;
+    font-size: 0.85rem;
+    padding: 1.5rem;
+}

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Microlensing Dataset Generator</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <h1>Synthetic Microlensing Dataset Generator</h1>
+        <p>
+            Generate synthetic gravitational microlensing light-curve datasets using the
+            single-lens (Pacynski) and binary-lens (Jacobian ray-shooting) models and the
+            parameter distributions documented in <em>TDR_ROC.pdf</em>
+            (&ldquo;Gravitational Microlensing&rdquo;, Roc Rubi&oacute;, pp. 8-29).
+        </p>
+    </header>
+
+    <main>
+        <section class="card">
+            <h2>1. Configure Dataset</h2>
+            <form id="generate-form">
+                <div class="field">
+                    <label for="n_total">Number of total events</label>
+                    <input type="number" id="n_total" name="n_total"
+                           min="{{ n_total_min }}" max="{{ n_total_max }}" value="1000" step="1" required>
+                    <p class="hint">Between {{ n_total_min }} and {{ "{:,}".format(n_total_max) }}. Larger datasets take longer to generate, especially with a higher binary-lens fraction.</p>
+                </div>
+
+                <div class="field">
+                    <label for="binary_percent">
+                        Binary-lens fraction
+                        <span class="recommended">(recommended: {{ recommended_binary_percent | int }}%)</span>
+                    </label>
+                    <div class="range-row">
+                        <input type="range" id="binary_percent_range" min="{{ binary_pct_min }}" max="{{ binary_pct_max }}"
+                               step="0.5" value="{{ recommended_binary_percent }}">
+                        <input type="number" id="binary_percent" name="binary_percent"
+                               min="{{ binary_pct_min }}" max="{{ binary_pct_max }}" step="0.5"
+                               value="{{ recommended_binary_percent }}" required>
+                        <span>%</span>
+                    </div>
+                    <p class="hint">{{ event_ratio_explanation }}</p>
+                </div>
+
+                <div class="field">
+                    <label for="n_time">
+                        Points per light curve (event)
+                        <span class="recommended">(recommended: {{ recommended_n_time }})</span>
+                    </label>
+                    <input type="number" id="n_time" name="n_time"
+                           min="{{ n_time_min }}" max="{{ n_time_max }}" value="{{ recommended_n_time }}" step="1" required>
+                    <p class="hint">{{ n_time_explanation }}</p>
+                </div>
+
+                <div class="field summary-preview">
+                    <span id="split-preview"></span>
+                </div>
+
+                <button type="submit" id="generate-btn">Generate Dataset</button>
+            </form>
+            <div id="generate-status" class="status"></div>
+        </section>
+
+        <section class="card" id="results-section" hidden>
+            <h2>2. Generated Dataset</h2>
+            <div id="results-summary"></div>
+
+            <div class="plot-block">
+                <h3>Parameter Distributions (shared by all events)</h3>
+                <img id="plot-distributions-common" class="plot" alt="Common parameter distributions">
+            </div>
+
+            <div class="plot-block" id="binary-distributions-block" hidden>
+                <h3>Parameter Distributions (binary-lens events only)</h3>
+                <img id="plot-distributions-binary" class="plot" alt="Binary parameter distributions">
+            </div>
+
+            <div class="plot-block">
+                <h3>Sample Light Curves</h3>
+                <img id="plot-sample-lightcurves" class="plot" alt="Sample light curves">
+            </div>
+
+            <div class="plot-block">
+                <h3>Coverage: Lens Mass vs. Lens Distance</h3>
+                <img id="plot-coverage" class="plot" alt="Coverage plot">
+            </div>
+
+            <div class="actions">
+                <a id="download-link" class="button" href="#">Download CSV</a>
+                <button id="validate-btn">Validate Dataset</button>
+            </div>
+            <div id="validate-status" class="status"></div>
+        </section>
+
+        <section class="card" id="validation-section" hidden>
+            <h2>3. Validation Against TDR_ROC.pdf (pp. 20-27)</h2>
+            <p>
+                The plots below overlay the histograms of <strong>your generated dataset</strong> with the
+                theoretical / literature reference shapes described in the corresponding figures of
+                <em>TDR_ROC.pdf</em>. Use the table to check that each parameter's distribution matches
+                what is expected from the source material.
+            </p>
+
+            <div class="plot-block">
+                <h3>Shared Parameters</h3>
+                <img id="plot-validation-common" class="plot" alt="Validation of common parameters">
+            </div>
+
+            <div class="plot-block">
+                <h3>Lens Velocity (Maxwell-Boltzmann)</h3>
+                <img id="plot-validation-velocity" class="plot" alt="Validation of lens velocity">
+            </div>
+
+            <div class="plot-block" id="binary-validation-block" hidden>
+                <h3>Binary-Lens Parameters</h3>
+                <img id="plot-validation-binary" class="plot" alt="Validation of binary parameters">
+            </div>
+
+            <h3>Validation Summary</h3>
+            <table id="validation-table">
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Literature Reference</th>
+                        <th>Observed in Generated Data</th>
+                        <th>Expected</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </section>
+
+        <section class="card">
+            <h2>Distribution Logic Reference</h2>
+            <p>
+                Each parameter below is sampled independently using the distribution shown,
+                derived from the figures and text in <em>TDR_ROC.pdf</em> (pp. 20-29).
+            </p>
+            <div class="param-grid">
+                {% for p in parameter_info %}
+                <div class="param-card">
+                    <h4>{{ p.name }}</h4>
+                    <p class="param-meta"><strong>Applies to:</strong> {{ p.applies_to }}</p>
+                    <p class="param-meta"><strong>Unit:</strong> {{ p.unit }}</p>
+                    <p class="param-meta"><strong>Distribution:</strong> {{ p.distribution }}</p>
+                    <p class="param-formula">{{ p.formula }}</p>
+                    <p>{{ p.explanation }}</p>
+                    <p class="param-ref">Reference: {{ p.reference }}</p>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>All work generated within <code>Dataset_generator/</code>, based on <code>Dataset1generator.ipynb</code>.</p>
+    </footer>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
