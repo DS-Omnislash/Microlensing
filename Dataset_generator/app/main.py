@@ -5,12 +5,16 @@ import uuid
 from collections import OrderedDict
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+# pyrefly: ignore [missing-import]
+from fastapi import FastAPI, HTTPException, Request
+# pyrefly: ignore [missing-import]
 from fastapi.responses import StreamingResponse
+# pyrefly: ignore [missing-import]
 from fastapi.staticfiles import StaticFiles
+# pyrefly: ignore [missing-import]
 from fastapi.templating import Jinja2Templates
+# pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field
-from starlette.requests import Request
 
 from . import content, plotting
 from .dataset import generate_dataset
@@ -93,10 +97,29 @@ def api_generate(req: GenerateRequest):
         "plots": {
             "distributions_common": plotting.plot_distributions_common(data),
             "distributions_binary": plotting.plot_distributions_binary(data),
-            "sample_lightcurves": plotting.plot_sample_lightcurves(data),
+            "sample_single_lightcurves": plotting.plot_sample_single_lightcurves(data),
+            "sample_binary_lightcurves": plotting.plot_sample_binary_lightcurves(data),
             "coverage": plotting.plot_coverage(data),
         },
     }
+
+
+@app.get("/api/sample-single/{dataset_id}")
+def api_sample_single(dataset_id: str, seed: int = 42):
+    data = _get_dataset(dataset_id)
+    plot_b64 = plotting.plot_sample_single_lightcurves(data, seed=seed)
+    if plot_b64 is None:
+        raise HTTPException(status_code=400, detail="No single-lens events in this dataset")
+    return {"plot": plot_b64}
+
+
+@app.get("/api/sample-binary/{dataset_id}")
+def api_sample_binary(dataset_id: str, seed: int = 42):
+    data = _get_dataset(dataset_id)
+    plot_b64 = plotting.plot_sample_binary_lightcurves(data, seed=seed)
+    if plot_b64 is None:
+        raise HTTPException(status_code=400, detail="No binary-lens events in this dataset")
+    return {"plot": plot_b64}
 
 
 @app.post("/api/validate/{dataset_id}")

@@ -153,6 +153,40 @@ button:disabled {
     border-radius: 6px;
 }
 
+.plot-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.plot-header-row h3 {
+    margin: 0;
+}
+
+.btn-refresh {
+    background: var(--accent-light);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    padding: 0.4rem 0.8rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.1s ease-in-out;
+}
+
+.btn-refresh:hover {
+    background: #d0e1f0;
+}
+
+.btn-refresh:disabled {
+    background: #e2e8f0;
+    color: #94a3b8;
+    border-color: #cbd5e1;
+    cursor: not-allowed;
+}
+
 .actions {
     display: flex;
     gap: 1rem;

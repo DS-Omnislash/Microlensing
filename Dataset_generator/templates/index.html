@@ -78,8 +78,19 @@
             </div>
 
             <div class="plot-block">
-                <h3>Sample Light Curves</h3>
-                <img id="plot-sample-lightcurves" class="plot" alt="Sample light curves">
+                <div class="plot-header-row">
+                    <h3>Sample Single-Lens Light Curves</h3>
+                    <button id="refresh-single-btn" class="btn-refresh" type="button">Refresh Single-Lens</button>
+                </div>
+                <img id="plot-sample-single-lightcurves" class="plot" alt="Sample single-lens light curves">
+            </div>
+
+            <div class="plot-block" id="binary-samples-block" hidden>
+                <div class="plot-header-row">
+                    <h3>Sample Binary-Lens Light Curves</h3>
+                    <button id="refresh-binary-btn" class="btn-refresh" type="button">Refresh Binary-Lens</button>
+                </div>
+                <img id="plot-sample-binary-lightcurves" class="plot" alt="Sample binary-lens light curves">
             </div>
 
             <div class="plot-block">

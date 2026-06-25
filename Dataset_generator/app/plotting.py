@@ -177,25 +177,23 @@ def plot_distributions_binary(data):
     return _fig_to_b64(fig)
 
 
-def plot_sample_lightcurves(data):
-    """A handful of representative single- and binary-lens light curves."""
+def plot_sample_single_lightcurves(data, seed=42):
+    """A handful of random single-lens light curves."""
     n_time = data["n_time"]
     tau = np.linspace(-3, 3, n_time)
     u0_all = data["u0_all"]
     n_single = data["n_single"]
-    n_binary = data["n_binary"]
     single_lc = data["single_lightcurves"]
-    binary_lc = data["binary_lightcurves"]
 
-    n_rows = 2 if n_binary > 0 else 1
-    fig, axes = plt.subplots(n_rows, 5, figsize=(18, 4 * n_rows), squeeze=False)
-    fig.suptitle("Sample Light Curves", fontsize=15, fontweight="bold")
+    if n_single == 0:
+        return None
 
-    targets = [0.01, 0.1, 0.3, 0.5, 0.8]
+    fig, axes = plt.subplots(1, 5, figsize=(18, 4), squeeze=False)
+    fig.suptitle("Sample Single-Lens Light Curves", fontsize=15, fontweight="bold")
+
     n_show = min(5, n_single)
-    single_indices = np.array([
-        np.argmin(np.abs(u0_all[:n_single] - target)) for target in targets[:n_show]
-    ]) if n_single > 0 else np.array([], dtype=int)
+    rng_plot = np.random.default_rng(seed)
+    single_indices = rng_plot.choice(n_single, size=n_show, replace=False)
 
     for j in range(5):
         ax = axes[0, j]
@@ -209,23 +207,41 @@ def plot_sample_lightcurves(data):
         else:
             ax.axis("off")
 
-    if n_binary > 0:
-        binary_peaks = binary_lc.max(axis=1)
-        n_show_b = min(5, n_binary)
-        binary_interesting = np.argsort(binary_peaks)[-n_show_b:][::-1]
-        for j in range(5):
-            ax = axes[1, j]
-            if j < len(binary_interesting):
-                idx = binary_interesting[j]
-                ax.plot(tau, binary_lc[idx, :], "r-", lw=1.5)
-                ax.set_title(
-                    f"Binary #{idx}\nq={data['q_binary'][idx]:.2e}, A_max={binary_peaks[idx]:.1f}",
-                    fontsize=10,
-                )
-                ax.set_xlabel(r"$\tau = (t-t_0)/t_E$")
-                ax.set_ylabel("A")
-            else:
-                ax.axis("off")
+    fig.tight_layout()
+    return _fig_to_b64(fig)
+
+
+def plot_sample_binary_lightcurves(data, seed=42):
+    """A handful of random binary-lens light curves."""
+    n_time = data["n_time"]
+    tau = np.linspace(-3, 3, n_time)
+    n_binary = data["n_binary"]
+    binary_lc = data["binary_lightcurves"]
+
+    if n_binary == 0:
+        return None
+
+    fig, axes = plt.subplots(1, 5, figsize=(18, 4), squeeze=False)
+    fig.suptitle("Sample Binary-Lens Light Curves", fontsize=15, fontweight="bold")
+
+    binary_peaks = binary_lc.max(axis=1)
+    n_show_b = min(5, n_binary)
+    rng_plot = np.random.default_rng(seed)
+    binary_interesting = rng_plot.choice(n_binary, size=n_show_b, replace=False)
+
+    for j in range(5):
+        ax = axes[0, j]
+        if j < len(binary_interesting):
+            idx = binary_interesting[j]
+            ax.plot(tau, binary_lc[idx, :], "r-", lw=1.5)
+            ax.set_title(
+                f"Binary #{idx}\nq={data['q_binary'][idx]:.2e}, A_max={binary_peaks[idx]:.1f}",
+                fontsize=10,
+            )
+            ax.set_xlabel(r"$\tau = (t-t_0)/t_E$")
+            ax.set_ylabel("A")
+        else:
+            ax.axis("off")
 
     fig.tight_layout()
     return _fig_to_b64(fig)

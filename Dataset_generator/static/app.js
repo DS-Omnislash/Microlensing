@@ -14,6 +14,11 @@ const binaryPercentRange = document.getElementById("binary_percent_range");
 const nTimeInput = document.getElementById("n_time");
 
 let currentDatasetId = null;
+let singleSeed = 42;
+let binarySeed = 42;
+
+const refreshSingleBtn = document.getElementById("refresh-single-btn");
+const refreshBinaryBtn = document.getElementById("refresh-binary-btn");
 
 function updateSplitPreview() {
     const nTotal = parseInt(nTotalInput.value, 10) || 0;
@@ -39,11 +44,17 @@ updateSplitPreview();
 
 function setImage(id, b64) {
     const img = document.getElementById(id);
+    if (!img) {
+        console.warn(`Element with id "${id}" not found.`);
+        return;
+    }
     if (b64) {
         img.src = `data:image/png;base64,${b64}`;
-        img.closest(".plot-block").hidden = false;
+        const block = img.closest(".plot-block");
+        if (block) block.hidden = false;
     } else {
-        img.closest(".plot-block").hidden = true;
+        const block = img.closest(".plot-block");
+        if (block) block.hidden = true;
     }
 }
 
@@ -76,6 +87,8 @@ form.addEventListener("submit", async (e) => {
 
         const data = await resp.json();
         currentDatasetId = data.dataset_id;
+        singleSeed = 42;
+        binarySeed = 42;
 
         document.getElementById("results-summary").innerHTML = `
             <p>
@@ -87,7 +100,7 @@ form.addEventListener("submit", async (e) => {
         `;
 
         setImage("plot-distributions-common", data.plots.distributions_common);
-        setImage("plot-sample-lightcurves", data.plots.sample_lightcurves);
+        setImage("plot-sample-single-lightcurves", data.plots.sample_single_lightcurves);
         setImage("plot-coverage", data.plots.coverage);
 
         const binaryBlock = document.getElementById("binary-distributions-block");
@@ -96,6 +109,14 @@ form.addEventListener("submit", async (e) => {
             binaryBlock.hidden = false;
         } else {
             binaryBlock.hidden = true;
+        }
+
+        const binarySamplesBlock = document.getElementById("binary-samples-block");
+        if (data.plots.sample_binary_lightcurves) {
+            setImage("plot-sample-binary-lightcurves", data.plots.sample_binary_lightcurves);
+            binarySamplesBlock.hidden = false;
+        } else {
+            binarySamplesBlock.hidden = true;
         }
 
         downloadLink.href = `/api/download/${currentDatasetId}`;
@@ -162,5 +183,43 @@ validateBtn.addEventListener("click", async () => {
         validateStatus.textContent = `Error: ${err.message}`;
     } finally {
         validateBtn.disabled = false;
+    }
+});
+
+refreshSingleBtn.addEventListener("click", async () => {
+    if (!currentDatasetId) return;
+    refreshSingleBtn.disabled = true;
+    singleSeed = Math.floor(Math.random() * 1000000);
+    try {
+        const resp = await fetch(`/api/sample-single/${currentDatasetId}?seed=${singleSeed}`);
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `Request failed with status ${resp.status}`);
+        }
+        const resData = await resp.json();
+        setImage("plot-sample-single-lightcurves", resData.plot);
+    } catch (err) {
+        alert(`Error refreshing single-lens curves: ${err.message}`);
+    } finally {
+        refreshSingleBtn.disabled = false;
+    }
+});
+
+refreshBinaryBtn.addEventListener("click", async () => {
+    if (!currentDatasetId) return;
+    refreshBinaryBtn.disabled = true;
+    binarySeed = Math.floor(Math.random() * 1000000);
+    try {
+        const resp = await fetch(`/api/sample-binary/${currentDatasetId}?seed=${binarySeed}`);
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `Request failed with status ${resp.status}`);
+        }
+        const resData = await resp.json();
+        setImage("plot-sample-binary-lightcurves", resData.plot);
+    } catch (err) {
+        alert(`Error refreshing binary-lens curves: ${err.message}`);
+    } finally {
+        refreshBinaryBtn.disabled = false;
     }
 });
