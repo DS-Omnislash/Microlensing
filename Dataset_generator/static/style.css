@@ -1,270 +1,527 @@
+/* ─── Variables ──────────────────────────────────────────────── */
 :root {
-    --accent: #2c5f8a;
-    --accent-light: #e8f1f8;
-    --border: #d8dee4;
-    --bg: #f6f8fa;
-    --ok: #1a7f37;
-    --check: #b35900;
+    --canvas:        #F6F6F6;
+    --surface:       #FFFFFF;
+    --border:        #E8E8E4;
+    --border-strong: #CFCFC8;
+    --text:          #1A1A18;
+    --text-2:        #78786E;
+    --text-3:        #ADADAA;
+    --ink:           #111110;
+    --ok:            #2D6A4F;
+    --ok-bg:         #EDF3EC;
+    --check:         #92400E;
+    --check-bg:      #FEF3C7;
+    --font-serif:    'Instrument Serif', Georgia, 'Times New Roman', serif;
+    --font-sans:     'DM Sans', system-ui, -apple-system, sans-serif;
+    --font-mono:     'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
 }
 
-* {
+/* ─── Reset ──────────────────────────────────────────────────── */
+*, *::before, *::after {
     box-sizing: border-box;
-}
-
-body {
-    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
     margin: 0;
-    background: var(--bg);
-    color: #1f2937;
-    line-height: 1.5;
+    padding: 0;
 }
 
+html { scroll-behavior: smooth; }
+
+/* ─── Base ───────────────────────────────────────────────────── */
+body {
+    font-family: var(--font-sans);
+    background: var(--canvas);
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Header ─────────────────────────────────────────────────── */
 header {
-    background: var(--accent);
-    color: white;
-    padding: 1.5rem 2rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 3rem 2rem 2.5rem;
+}
+
+.header-inner {
+    max-width: 72rem;
+    margin: 0 auto;
+}
+
+.header-eyebrow {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 0.75rem;
 }
 
 header h1 {
-    margin: 0 0 0.5rem 0;
-    font-size: 1.6rem;
+    font-family: var(--font-serif);
+    font-size: clamp(1.875rem, 4vw, 2.75rem);
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    color: var(--ink);
+    margin-bottom: 0.875rem;
 }
 
 header p {
-    margin: 0;
-    max-width: 70rem;
+    color: var(--text-2);
+    max-width: 60ch;
+    font-size: 0.9375rem;
+    line-height: 1.65;
 }
 
+/* ─── Main layout ────────────────────────────────────────────── */
 main {
-    max-width: 70rem;
-    margin: 1.5rem auto;
-    padding: 0 1rem;
+    max-width: 72rem;
+    margin: 2.5rem auto;
+    padding: 0 2rem;
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 1.25rem;
 }
 
+/* ─── Cards ──────────────────────────────────────────────────── */
 .card {
-    background: white;
+    background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 1.25rem 1.5rem;
+    border-radius: 6px;
+    padding: 2rem 2.5rem;
 }
 
 .card h2 {
-    margin-top: 0;
-    border-bottom: 2px solid var(--accent-light);
-    padding-bottom: 0.5rem;
+    font-family: var(--font-sans);
+    font-size: 1.0625rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    color: var(--ink);
+    margin-bottom: 1.75rem;
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
 }
 
+
+.section-desc {
+    color: var(--text-2);
+    font-size: 0.9rem;
+    margin: -1rem 0 1.75rem;
+    max-width: 64ch;
+    line-height: 1.6;
+}
+
+/* ─── Form fields ────────────────────────────────────────────── */
 .field {
-    margin-bottom: 1.25rem;
+    margin-bottom: 1.75rem;
 }
 
 .field label {
-    display: block;
-    font-weight: 600;
-    margin-bottom: 0.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 0.5rem;
 }
 
 .recommended {
-    font-weight: normal;
-    color: var(--accent);
-    font-size: 0.85rem;
+    font-weight: 400;
+    font-size: 0.75rem;
+    color: var(--text-3);
 }
 
 .field input[type="number"] {
     width: 10rem;
-    padding: 0.4rem 0.5rem;
+    padding: 0.5rem 0.75rem;
     border: 1px solid var(--border);
-    border-radius: 4px;
-    font-size: 1rem;
+    border-radius: 3px;
+    font-size: 0.9375rem;
+    font-family: var(--font-sans);
+    color: var(--text);
+    background: var(--canvas);
+    outline: none;
+    transition: border-color 150ms;
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
+.field input[type="number"]:focus {
+    border-color: var(--ink);
 }
 
 .range-row {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.875rem;
 }
 
 .range-row input[type="range"] {
     flex: 1;
+    height: 2px;
+    accent-color: var(--ink);
+    cursor: pointer;
 }
 
 .range-row input[type="number"] {
     width: 6rem;
 }
 
+.unit {
+    font-size: 0.875rem;
+    color: var(--text-2);
+}
+
 .hint {
-    margin: 0.4rem 0 0 0;
-    font-size: 0.85rem;
-    color: #57606a;
+    margin-top: 0.5rem;
+    font-size: 0.8125rem;
+    color: var(--text-2);
+    line-height: 1.55;
+    max-width: 68ch;
 }
 
 .summary-preview {
-    font-weight: 600;
-    color: var(--accent);
+    font-size: 0.875rem;
+    color: var(--text-2);
+    background: var(--canvas);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0.75rem 1rem;
+    min-height: 2.625rem;
 }
 
+/* ─── Buttons ────────────────────────────────────────────────── */
 button, .button {
-    background: var(--accent);
-    color: white;
-    border: none;
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    font-weight: 500;
+    padding: 0.5625rem 1.25rem;
     border-radius: 4px;
-    padding: 0.6rem 1.2rem;
-    font-size: 1rem;
     cursor: pointer;
     text-decoration: none;
     display: inline-block;
+    border: 1px solid transparent;
+    transition: opacity 140ms, transform 120ms;
+    line-height: 1.4;
 }
 
-button:hover, .button:hover {
-    background: #1f496c;
+/* Primary — all <button> elements unless overridden */
+button {
+    background: var(--ink);
+    color: #ffffff;
+    border-color: var(--ink);
 }
+
+button:hover { opacity: 0.8; }
+button:active { transform: scale(0.98); }
 
 button:disabled {
-    background: #9aa5b1;
+    background: var(--border);
+    color: var(--text-3);
+    border-color: var(--border);
     cursor: not-allowed;
+    transform: none;
+    opacity: 1;
 }
 
+/* Secondary — <a class="button"> download link */
+a.button {
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border-strong);
+}
+
+a.button:hover {
+    background: var(--canvas);
+    opacity: 1;
+}
+
+/* Ghost — refresh buttons */
+.btn-refresh {
+    background: transparent;
+    color: var(--text-2);
+    border-color: var(--border);
+    font-size: 0.8125rem;
+    padding: 0.375rem 0.875rem;
+}
+
+.btn-refresh:hover {
+    border-color: var(--border-strong);
+    color: var(--text);
+    opacity: 1;
+    transform: none;
+}
+
+.btn-refresh:disabled {
+    background: transparent;
+    color: var(--text-3);
+    border-color: var(--border);
+    cursor: not-allowed;
+    transform: none;
+    opacity: 1;
+}
+
+/* ─── Status messages ────────────────────────────────────────── */
 .status {
-    margin-top: 0.75rem;
-    font-style: italic;
-    color: #57606a;
+    margin-top: 0.875rem;
+    font-size: 0.8125rem;
+    color: var(--text-2);
+    min-height: 1.25em;
 }
 
 .status.error {
-    color: #b91c1c;
+    color: #B91C1C;
     font-style: normal;
-    font-weight: 600;
+    font-weight: 500;
 }
 
-.plot-block {
-    margin: 1.5rem 0;
-}
-
-.plot-block h3 {
+/* ─── Results summary ────────────────────────────────────────── */
+#results-summary {
     margin-bottom: 0.5rem;
 }
 
+#results-summary p {
+    font-size: 0.9rem;
+    color: var(--text-2);
+}
+
+#results-summary strong {
+    color: var(--text);
+    font-weight: 600;
+}
+
+/* ─── Plot blocks ────────────────────────────────────────────── */
+.plot-block {
+    margin-top: 1.75rem;
+    padding-top: 1.75rem;
+    border-top: 1px solid var(--border);
+}
+
+.plot-block h3 {
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-3);
+    margin-bottom: 0.875rem;
+}
+
 .plot {
+    display: block;
     max-width: 100%;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 3px;
 }
 
 .plot-header-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.875rem;
 }
 
 .plot-header-row h3 {
-    margin: 0;
+    margin-bottom: 0;
 }
 
-.btn-refresh {
-    background: var(--accent-light);
-    color: var(--accent);
-    border: 1px solid var(--accent);
-    border-radius: 4px;
-    padding: 0.4rem 0.8rem;
-    font-size: 0.9rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.1s ease-in-out;
-}
-
-.btn-refresh:hover {
-    background: #d0e1f0;
-}
-
-.btn-refresh:disabled {
-    background: #e2e8f0;
-    color: #94a3b8;
-    border-color: #cbd5e1;
-    cursor: not-allowed;
-}
-
+/* ─── Actions row ────────────────────────────────────────────── */
 .actions {
     display: flex;
-    gap: 1rem;
+    gap: 0.75rem;
     align-items: center;
-    margin-top: 1rem;
+    margin-top: 2rem;
+    padding-top: 1.75rem;
+    border-top: 1px solid var(--border);
+}
+
+/* ─── Validation table ───────────────────────────────────────── */
+.table-heading {
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-3);
+    margin: 2rem 0 0.75rem;
 }
 
 table {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 0.75rem;
-    font-size: 0.9rem;
-}
-
-th, td {
-    border: 1px solid var(--border);
-    padding: 0.5rem 0.6rem;
-    text-align: left;
-    vertical-align: top;
+    font-size: 0.875rem;
 }
 
 th {
-    background: var(--accent-light);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-3);
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    background: none;
+}
+
+td {
+    padding: 0.625rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    color: var(--text);
+    line-height: 1.5;
+}
+
+tr:last-child td {
+    border-bottom: none;
 }
 
 .status-ok {
     color: var(--ok);
-    font-weight: 700;
+    font-weight: 600;
+    font-size: 0.8125rem;
+    letter-spacing: 0.02em;
 }
 
 .status-check {
     color: var(--check);
-    font-weight: 700;
+    font-weight: 600;
+    font-size: 0.8125rem;
+    letter-spacing: 0.02em;
 }
 
+/* ─── Parameter grid ─────────────────────────────────────────── */
 .param-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 1rem;
-    margin-top: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(295px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 1.5rem;
 }
 
 .param-card {
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 0.85rem 1rem;
-    background: var(--bg);
+    background: var(--surface);
+    padding: 1.375rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.param-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.625rem;
+    margin-bottom: 0.375rem;
 }
 
 .param-card h4 {
-    margin: 0 0 0.4rem 0;
-    color: var(--accent);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1.3;
+}
+
+.param-scope {
+    flex-shrink: 0;
+    font-size: 0.625rem;
+    font-weight: 500;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    background: var(--canvas);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0.2rem 0.5rem;
+    white-space: nowrap;
+    margin-top: 0.125rem;
 }
 
 .param-meta {
-    margin: 0.15rem 0;
-    font-size: 0.85rem;
+    font-size: 0.8125rem;
+    color: var(--text-2);
+    display: flex;
+    gap: 0.625rem;
+    line-height: 1.4;
+}
+
+.meta-label {
+    font-weight: 500;
+    color: var(--text-3);
+    min-width: 5.5rem;
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding-top: 0.05em;
 }
 
 .param-formula {
-    font-family: "Cascadia Code", Consolas, monospace;
-    font-size: 0.8rem;
-    background: white;
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text);
+    background: var(--canvas);
     border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 0.35rem 0.5rem;
+    border-radius: 3px;
+    padding: 0.45rem 0.65rem;
     overflow-x: auto;
+    line-height: 1.55;
+    margin: 0.25rem 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.param-explanation {
+    font-size: 0.8125rem;
+    color: var(--text-2);
+    line-height: 1.6;
 }
 
 .param-ref {
-    font-size: 0.8rem;
-    color: #57606a;
-    margin-bottom: 0;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    color: var(--text-3);
+    margin-top: auto;
+    padding-top: 0.25rem;
 }
 
+/* ─── Footer ─────────────────────────────────────────────────── */
 footer {
     text-align: center;
-    color: #57606a;
-    font-size: 0.85rem;
-    padding: 1.5rem;
+    color: var(--text-3);
+    font-size: 0.8125rem;
+    padding: 2rem;
+    border-top: 1px solid var(--border);
+    margin-top: 0.5rem;
+}
+
+footer code {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: var(--text-2);
+}
+
+/* ─── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 768px) {
+    header { padding: 2rem 1.25rem 1.75rem; }
+
+    main {
+        padding: 0 1rem;
+        margin: 1.5rem auto;
+    }
+
+    .card { padding: 1.5rem 1.25rem; }
+
+    .field input[type="number"] { width: 100%; }
+
+    .range-row { flex-wrap: wrap; }
+
+    .actions { flex-direction: column; align-items: flex-start; }
 }
