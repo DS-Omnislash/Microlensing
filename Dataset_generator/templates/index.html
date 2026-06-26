@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=5">
+    <link rel="stylesheet" href="/static/style.css?v=6">
 </head>
 <body>
     <header>
@@ -258,6 +258,9 @@
                     <p class="param-meta"><span class="meta-label">Unit</span>{{ p.unit }}</p>
                     <p class="param-meta"><span class="meta-label">Distribution</span>{{ p.distribution }}</p>
                     <code class="param-formula">{{ p.formula }}</code>
+                    {% if p.key != "t_E_days" %}
+                    <div class="param-plot" id="dist-plot-{{ p.key }}"></div>
+                    {% endif %}
                     <p class="param-explanation">{{ p.explanation }}</p>
                     <p class="param-ref">{{ p.reference }}</p>
                 </div>
@@ -270,6 +273,8 @@
         <p>Based on <code>Dataset1generator.ipynb</code> &mdash; Roc Rubió, 2026</p>
     </footer>
 
+    <script type="application/json" id="dist-plots-data">{{ distribution_plots_json | safe }}</script>
+    <script src="https://cdn.plot.ly/plotly-basic-2.26.0.min.js"></script>
     <script src="/static/app.js"></script>
 </body>
 </html>

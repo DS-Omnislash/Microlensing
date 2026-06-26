@@ -368,3 +368,14 @@ refreshBinaryBtn.addEventListener("click", async () => {
         refreshBinaryBtn.disabled = false;
     }
 });
+// ── Reference distribution plots (Plotly.js) ─────────────────────────────
+(function () {
+    const dataEl = document.getElementById("dist-plots-data");
+    if (!dataEl || !window.Plotly) return;
+    const plots = JSON.parse(dataEl.textContent);
+    const config = { displayModeBar: false, responsive: true };
+    for (const [key, fig] of Object.entries(plots)) {
+        const el = document.getElementById(`dist-plot-${key}`);
+        if (el) Plotly.newPlot(el, fig.data, fig.layout, config);
+    }
+})();

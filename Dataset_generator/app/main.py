@@ -18,7 +18,7 @@ from fastapi.templating import Jinja2Templates
 # pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field
 
-from . import content, plotting
+from . import content, distribution_plots, plotting
 from .dataset import generate_dataset
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -148,6 +148,7 @@ def index(request: Request):
             "n_time_max": N_TIME_MAX,
             "binary_pct_min": BINARY_PCT_MIN,
             "binary_pct_max": BINARY_PCT_MAX,
+            "distribution_plots_json": distribution_plots.DISTRIBUTION_PLOTS_JSON,
         },
     )
 
