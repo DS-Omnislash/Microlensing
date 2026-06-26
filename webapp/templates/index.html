@@ -258,7 +258,7 @@
                     <p class="param-meta"><span class="meta-label">Unit</span>{{ p.unit }}</p>
                     <p class="param-meta"><span class="meta-label">Distribution</span>{{ p.distribution }}</p>
                     <code class="param-formula">{{ p.formula }}</code>
-                    {% if p.key != "t_E_days" %}
+                    {% if p.key not in ("t_E_days", "alpha_ref_rad") %}
                     <div class="param-plot" id="dist-plot-{{ p.key }}"></div>
                     {% endif %}
                     <p class="param-explanation">{{ p.explanation }}</p>

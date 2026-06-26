@@ -20,7 +20,6 @@ from .distributions import (
     sample_distance_to_lens,
     sample_mass_ratio,
     sample_semi_major_axis,
-    sample_trajectory_angle,
 )
 
 _N = 100_000
@@ -130,10 +129,6 @@ def _compute_all() -> dict:
         "eccentricity": _fig(
             sample_eccentricity(n, rng),
             "Eccentricity e", x_lo=0.0, x_hi=0.55,
-        ),
-        "alpha_ref_rad": _fig(
-            sample_trajectory_angle(n, rng),
-            "α_ref (rad)", x_lo=0.0, x_hi=6.284, zero_outside=False,
         ),
     }
 
