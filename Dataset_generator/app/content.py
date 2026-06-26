@@ -1,4 +1,4 @@
-"""Static explanatory content describing the distribution logic.
+﻿"""Static explanatory content describing the distribution logic.
 
 All references are to ``TDR_ROC.pdf`` (Roc Rubio, "Gravitational
 Microlensing"), section "Parameters distributions" (pp. 20-29).
@@ -36,7 +36,7 @@ PARAMETER_INFO = [
         "applies_to": "All events",
         "distribution": "Bimodal Gaussian mixture",
         "formula": "0.25 x N(0.10, 0.06^2) + 0.75 x N(0.45, 0.22^2), clipped to [0.01, 1.2]",
-        "reference": "TdR Image 2, p.21 (NASA Exoplanet Archive)",
+        "reference": "TdR Image 2, p.20 (NASA Exoplanet Archive)",
         "explanation": (
             "The lens mass directly sets the Einstein radius. Real "
             "microlensing lens masses, taken from the NASA Exoplanet "
@@ -52,7 +52,7 @@ PARAMETER_INFO = [
         "applies_to": "All events",
         "distribution": "Bulge-peaked Gaussian mixture",
         "formula": "0.20 x N(1500, 800^2) + 0.80 x N(6800, 750^2), clipped to [300, 8500]",
-        "reference": "TdR Image 5, p.24 (Paczynski 1991)",
+        "reference": "TdR Image 5, p.23 (Paczynski 1991)",
         "explanation": (
             "Paczynski's analysis shows a prominent peak in the Galactic "
             "bulge regime (6-7 kpc), where most surveys point their "
@@ -67,7 +67,7 @@ PARAMETER_INFO = [
         "applies_to": "All events",
         "distribution": "Structured uniform with mild peaks",
         "formula": "0.70 x U(100, 8000) + 0.15 x N(1000, 500^2) + 0.15 x N(5000, 800^2), clipped to [100, 8000]",
-        "reference": "TdR Image 4, p.23 (NASA Exoplanet Archive)",
+        "reference": "TdR Image 4, p.22 (NASA Exoplanet Archive)",
         "explanation": (
             "Few catalogued events report the source distance directly, so "
             "D_ls = D_s - D_l is reconstructed from limited data. The "
@@ -82,7 +82,7 @@ PARAMETER_INFO = [
         "applies_to": "All events",
         "distribution": "Maxwell-Boltzmann",
         "formula": "MaxwellBoltzmann(scale = 200/sqrt(2)), i.e. mode = 200 km/s",
-        "reference": "TdR p.25 (Rahvar 2015)",
+        "reference": "TdR p.24 (Rahvar 2015)",
         "explanation": (
             "Transversal velocity cannot be measured directly from "
             "photometry alone, so a Maxwell-Boltzmann distribution with a "
@@ -97,7 +97,7 @@ PARAMETER_INFO = [
         "applies_to": "All events",
         "distribution": "Truncated exponential (telescope bias)",
         "formula": "TruncExp(lambda=3) on [0, 1]",
-        "reference": "TdR Image 7, p.26 (OGLE-IV)",
+        "reference": "TdR Image 7, p.25 (OGLE-IV)",
         "explanation": (
             "Theoretically u0 should be uniform on (0,1) (Paczynski 1986), "
             "since the alignment probability is proportional to the "
@@ -115,7 +115,7 @@ PARAMETER_INFO = [
         "applies_to": "All events (derived)",
         "distribution": "Derived quantity",
         "formula": "t_E = r_E / v_perp, where r_E = sqrt(4GM/c^2 * D_l*D_ls/D_s)",
-        "reference": "TdR p.8-9",
+        "reference": "TdR p.7-8",
         "explanation": (
             "Not sampled directly: t_E follows from the Einstein radius "
             "(set by lens mass and the three distances) and the transversal "
@@ -130,7 +130,7 @@ PARAMETER_INFO = [
         "applies_to": "Binary-lens events only",
         "distribution": "Log-normal",
         "formula": "log10(q) ~ N(log10(1.43e-3), 1.0^2), clipped to [1e-6, 0.999]",
-        "reference": "TdR Image 3, p.22 (NASA Exoplanet Archive)",
+        "reference": "TdR Image 3, p.21 (NASA Exoplanet Archive)",
         "explanation": (
             "q = M_planet / (M_star + M_planet) sets how strongly the "
             "secondary body perturbs the light curve. Computed from "
@@ -145,7 +145,7 @@ PARAMETER_INFO = [
         "applies_to": "Binary-lens events only",
         "distribution": "Bimodal log-normal",
         "formula": "0.70 x LogN(10^-6.4, 0.35) + 0.30 x LogN(10^-5.0, 0.40), clipped to [1e-8, 0.1]",
-        "reference": "TdR Image 8, p.27 (NASA Planetary Systems)",
+        "reference": "TdR Image 8, p.26 (NASA Planetary Systems)",
         "explanation": (
             "The planet's orbital semi-major axis controls its angular "
             "separation from the host star. NASA Planetary Systems data "
@@ -161,7 +161,7 @@ PARAMETER_INFO = [
         "applies_to": "Binary-lens events only",
         "distribution": "Beta distribution",
         "formula": "Beta(alpha=1.5, beta=12), mode ~ 0.043",
-        "reference": "TdR Image 9, p.27-28 (NASA Planetary Systems, van Eylen+ 2018)",
+        "reference": "TdR Image 9, p.26-27 (NASA Planetary Systems, van Eylen+ 2018)",
         "explanation": (
             "Together with the semi-major axis, eccentricity defines the "
             "planet's orbit shape. Real catalogues show many exactly-zero "
@@ -177,7 +177,7 @@ PARAMETER_INFO = [
         "applies_to": "Binary-lens events only",
         "distribution": "Uniform",
         "formula": "U(0, 2*pi)",
-        "reference": "TdR p.29",
+        "reference": "TdR p.28",
         "explanation": (
             "The orientation of the source trajectory relative to the "
             "binary axis at the reference time is theoretically completely "
