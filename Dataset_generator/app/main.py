@@ -56,6 +56,8 @@ class GenerateRequest(BaseModel):
     n_total: int = Field(..., ge=N_TOTAL_MIN, le=N_TOTAL_MAX)
     binary_percent: float = Field(..., ge=BINARY_PCT_MIN, le=BINARY_PCT_MAX)
     n_time: int = Field(..., ge=N_TIME_MIN, le=N_TIME_MAX)
+    selected_params: list[str] = Field(default_factory=list)
+    preset: str = Field(default="")
 
 
 @app.get("/")
@@ -86,6 +88,9 @@ def api_generate(req: GenerateRequest):
         binary_fraction=req.binary_percent / 100.0,
         n_time=req.n_time,
     )
+    data["selected_params"] = req.selected_params
+    data["binary_percent"] = req.binary_percent
+    data["preset"] = req.preset
     dataset_id = _store_dataset(data)
 
     return {
@@ -145,11 +150,25 @@ def api_download(dataset_id: str):
     data = _get_dataset(dataset_id)
     df = data["df"]
 
+    selected = data.get("selected_params", [])
+    if selected:
+        selected_set = set(selected)
+        time_cols = [c for c in df.columns if c.startswith("t_") and c[2:].isdigit()]
+        keep = set()
+        for s in selected_set:
+            if s == "__lightcurves__":
+                keep.update(time_cols)
+            elif s in df.columns:
+                keep.add(s)
+        df = df[[c for c in df.columns if c in keep]]
+
     buf = io.StringIO()
     df.to_csv(buf, index=False, float_format="%.10g")
     buf.seek(0)
 
-    filename = f"microlensing_dataset_{data['n_total']}_events_{data['n_time']}pts.csv"
+    pct_str = f"{data['binary_percent']:g}%"
+    preset_part = f"_{data['preset']}" if data.get("preset") else ""
+    filename = f"Microlensing_Dataset_{data['n_total']}_{pct_str}_{data['n_time']}pts{preset_part}.csv"
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="text/csv",

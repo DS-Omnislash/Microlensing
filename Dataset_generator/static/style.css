@@ -194,6 +194,90 @@ main {
     min-height: 2.625rem;
 }
 
+/* ─── Column selector ───────────────────────────────────────── */
+.field-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.field-label-row label {
+    margin-bottom: 0;
+}
+
+.col-toggles {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    font-size: 0.75rem;
+    color: var(--text-3);
+}
+
+.btn-text {
+    background: none;
+    border: none;
+    padding: 0;
+    border-radius: 0;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-2);
+    cursor: pointer;
+    transition: color 120ms;
+}
+
+.btn-text:hover {
+    color: var(--ink);
+    opacity: 1;
+    transform: none;
+}
+
+.col-select-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 0.375rem;
+    margin-top: 0.625rem;
+}
+
+.checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+    color: var(--text);
+    cursor: pointer;
+    padding: 0.375rem 0.625rem;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--canvas);
+    transition: border-color 120ms;
+    user-select: none;
+}
+
+.checkbox-item:hover {
+    border-color: var(--border-strong);
+}
+
+.checkbox-item input[type="checkbox"] {
+    accent-color: var(--ink);
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    cursor: pointer;
+    margin: 0;
+}
+
+.checkbox-item--curves {
+    border-style: dashed;
+}
+
+.col-code {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    color: var(--text-3);
+}
+
 /* ─── Buttons ────────────────────────────────────────────────── */
 button, .button {
     font-family: var(--font-sans);

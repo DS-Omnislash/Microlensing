@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=3">
+    <link rel="stylesheet" href="/static/style.css?v=4">
 </head>
 <body>
     <header>
@@ -53,6 +53,84 @@
                     <input type="number" id="n_time" name="n_time"
                            min="{{ n_time_min }}" max="{{ n_time_max }}" value="{{ recommended_n_time }}" step="1" required>
                     <p class="hint">{{ n_time_explanation }}</p>
+                </div>
+
+                <div class="field">
+                    <div class="field-label-row">
+                        <label>Output columns</label>
+                        <span class="col-toggles">
+                            <button type="button" id="cols-all-btn" class="btn-text">All</button>
+                            <span>&middot;</span>
+                            <button type="button" id="cols-none-btn" class="btn-text">None</button>
+                            <span>&middot;</span>
+                            <button type="button" id="cols-classification-btn" class="btn-text">Classification</button>
+                            <span>&middot;</span>
+                            <button type="button" id="cols-single-btn" class="btn-text">Single lens</button>
+                            <span>&middot;</span>
+                            <button type="button" id="cols-model-btn" class="btn-text">Model</button>
+                            <span>&middot;</span>
+                            <button type="button" id="cols-distributions-btn" class="btn-text">Distributions</button>
+                        </span>
+                    </div>
+                    <p class="hint">Select which columns to include in the downloaded CSV. All selected by default.</p>
+                    <div class="col-select-grid">
+                        <label class="checkbox-item">
+                            <input type="checkbox" class="col-check" value="event_lenses" checked>
+                            <span>Lens type <code class="col-code">event_lenses</code></span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" class="col-check" value="M_star_solar" checked>
+                            <span>Lens mass <code class="col-code">M_star_solar</code></span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" class="col-check" value="D_l_pc" checked>
+                            <span>Lens distance <code class="col-code">D_l_pc</code></span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" class="col-check" value="D_ls_pc" checked>
+                            <span>Lens–source distance <code class="col-code">D_ls_pc</code></span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" class="col-check" value="D_s_pc" checked>
+                            <span>Source distance <code class="col-code">D_s_pc</code></span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" class="col-check" value="v_perp_kms" checked>
+                            <span>Transversal velocity <code class="col-code">v_perp_kms</code></span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" class="col-check" value="u0" checked>
+                            <span>Impact parameter <code class="col-code">u0</code></span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" class="col-check" value="r_E_m" checked>
+                            <span>Einstein radius <code class="col-code">r_E_m</code></span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" class="col-check" value="t_E_days" checked>
+                            <span>Einstein time <code class="col-code">t_E_days</code></span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" class="col-check" value="q" checked>
+                            <span>Mass ratio <code class="col-code">q</code></span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" class="col-check" value="a_pc" checked>
+                            <span>Semi-major axis <code class="col-code">a_pc</code></span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" class="col-check" value="eccentricity" checked>
+                            <span>Eccentricity <code class="col-code">eccentricity</code></span>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" class="col-check" value="alpha_ref_rad" checked>
+                            <span>Trajectory angle <code class="col-code">alpha_ref_rad</code></span>
+                        </label>
+                        <label class="checkbox-item checkbox-item--curves">
+                            <input type="checkbox" class="col-check" value="__lightcurves__" checked>
+                            <span>Light curve series <code class="col-code">t_000 … t_n</code></span>
+                        </label>
+                    </div>
                 </div>
 
                 <div class="field summary-preview">
