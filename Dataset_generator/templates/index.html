@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=4">
+    <link rel="stylesheet" href="/static/style.css?v=5">
 </head>
 <body>
     <header>
@@ -72,7 +72,7 @@
                             <button type="button" id="cols-distributions-btn" class="btn-text">Distributions</button>
                         </span>
                     </div>
-                    <p class="hint">Select which columns to include in the downloaded CSV. All selected by default.</p>
+                    <p class="hint">Select which columns to include in the downloaded file. All selected by default.</p>
                     <div class="col-select-grid">
                         <label class="checkbox-item">
                             <input type="checkbox" class="col-check" value="event_lenses" checked>
@@ -172,51 +172,77 @@
                 <img id="plot-sample-binary-lightcurves" class="plot" alt="Sample binary-lens light curves">
             </div>
 
-            <div class="plot-block">
-                <h3>Coverage — lens mass vs. lens distance</h3>
-                <img id="plot-coverage" class="plot" alt="Coverage plot">
-            </div>
-
             <div class="actions">
-                <button id="validate-btn">Validate dataset</button>
                 <a id="download-link" class="button" href="#">Download CSV</a>
                 <a id="download-pkl-link" class="button" href="#">Download PKL</a>
             </div>
-            <div id="validate-status" class="status"></div>
         </section>
 
-        <section class="card" id="validation-section" hidden>
+        <section class="card" id="validation-section">
             <h2>Validation</h2>
-            <p class="section-desc">Generated histograms overlaid with theoretical reference shapes from <em>TDR_ROC.pdf</em> (pp. 20–27).</p>
+            <p class="section-desc">Compare parameter distributions against TDR_ROC.pdf reference shapes (pp. 20–28). Validate a recently generated dataset or upload an existing one.</p>
 
-            <div class="plot-block">
-                <h3>Shared parameters</h3>
-                <img id="plot-validation-common" class="plot" alt="Validation of common parameters">
+            <div class="validation-modes">
+                <div class="validation-mode">
+                    <h3 class="validation-mode-title">Recently generated dataset</h3>
+                    <p class="hint">Generate a dataset above, then validate its distributions here.</p>
+                    <button id="validate-btn" disabled>Validate generated dataset</button>
+                    <div id="validate-status" class="status"></div>
+                </div>
+
+                <div class="validation-separator"><span>or</span></div>
+
+                <div class="validation-mode">
+                    <h3 class="validation-mode-title">Upload existing dataset</h3>
+                    <p class="hint">Upload a <code>.csv</code> or <code>.pkl</code> dataset file. The app will detect its structure and validate its distributions.</p>
+                    <div class="upload-row">
+                        <label class="btn-upload" for="upload-file">Choose file</label>
+                        <input type="file" id="upload-file" accept=".csv,.pkl">
+                        <span id="upload-filename" class="upload-filename">No file selected</span>
+                        <button id="upload-analyze-btn" type="button" disabled>Analyze</button>
+                    </div>
+                    <div id="upload-status" class="status"></div>
+
+                    <div id="upload-info" hidden>
+                        <div class="info-grid" id="upload-info-grid"></div>
+                        <div class="upload-validate-row">
+                            <button id="validate-uploaded-btn" type="button">Validate uploaded dataset</button>
+                            <div id="validate-uploaded-status" class="status"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <div class="plot-block">
-                <h3>Lens velocity — Maxwell-Boltzmann</h3>
-                <img id="plot-validation-velocity" class="plot" alt="Validation of lens velocity">
+            <div id="validation-results" hidden>
+                <div class="plot-block" id="validation-common-block" hidden>
+                    <h3>Shared parameters</h3>
+                    <img id="plot-validation-common" class="plot" alt="Validation of common parameters">
+                </div>
+                <div class="plot-block" id="validation-velocity-block" hidden>
+                    <h3>Lens velocity — Maxwell-Boltzmann</h3>
+                    <img id="plot-validation-velocity" class="plot" alt="Validation of lens velocity">
+                </div>
+                <div class="plot-block" id="binary-validation-block" hidden>
+                    <h3>Binary-lens parameters</h3>
+                    <img id="plot-validation-binary" class="plot" alt="Validation of binary parameters">
+                </div>
+                <div id="no-validation-data" class="hint" hidden>
+                    No parameter columns found to validate. The dataset may contain only light curves or unrecognized columns.
+                </div>
+                <h3 class="table-heading" id="validation-table-heading" hidden>Validation summary</h3>
+                <table id="validation-table" hidden>
+                    <thead>
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Reference</th>
+                            <th>Observed</th>
+                            <th>Expected</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
             </div>
-
-            <div class="plot-block" id="binary-validation-block" hidden>
-                <h3>Binary-lens parameters</h3>
-                <img id="plot-validation-binary" class="plot" alt="Validation of binary parameters">
-            </div>
-
-            <h3 class="table-heading">Validation summary</h3>
-            <table id="validation-table">
-                <thead>
-                    <tr>
-                        <th>Parameter</th>
-                        <th>Reference</th>
-                        <th>Observed</th>
-                        <th>Expected</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
         </section>
 
         <section class="card">

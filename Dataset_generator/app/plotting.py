@@ -1,4 +1,4 @@
-"""Matplotlib figure generation for the dataset generator web UI.
+﻿"""Matplotlib figure generation for the dataset generator web UI.
 
 All figures are rendered server-side and returned as base64-encoded PNG
 strings so they can be embedded directly in the HTML response.
@@ -247,253 +247,287 @@ def plot_sample_binary_lightcurves(data, seed=42):
     return _fig_to_b64(fig)
 
 
-def plot_coverage(data):
-    """Coverage scatter of lens mass vs lens distance (cf. TdR Image 6, p.24-25)."""
-    M_star_solar = data["M_star_solar"]
-    D_l_pc = data["D_l_pc"]
-    n_show = min(5000, len(M_star_solar))
-
-    fig, ax = plt.subplots(figsize=(8, 5.5))
-    ax.scatter(M_star_solar[:n_show], D_l_pc[:n_show], c="slateblue", alpha=0.3, s=10, edgecolors="none")
-    ax.axvline(1.0, color="orange", ls="--", lw=1.5, label="Sun (1 Msun)")
-    ax.set_xlabel("Lens Mass [Msun]")
-    ax.set_ylabel("Lens Distance D_l [pc]")
-    ax.set_title("Coverage: Lens Mass vs. Lens Distance (cf. TdR Image 6)")
-    ax.set_xscale("log")
-    ax.legend()
-    fig.tight_layout()
-    return _fig_to_b64(fig)
-
-
 # ---------------------------------------------------------------------------
-# Validation plots: generated histogram + literature reference curve overlay
+# Validation: flexible, works for both generated and uploaded datasets.
+# Only plots parameters that are present in `data`.
+# Page references follow TDR_ROC.pdf physical page numbering (document
+# starts counting from PDF page 2, so PDF p.N = physical p.(N-1)).
 # ---------------------------------------------------------------------------
 
-def plot_validation_common(data):
-    """Generated histograms overlaid with the literature reference shapes
-    described in TDR_ROC.pdf pp. 21-26 (Images 2, 4, 5, 7).
+def plot_validation_available(data):
+    """Validate a dataset against TdR reference distributions.
 
-    Returns (image_b64, stats) where stats is a list of dicts describing
-    each check.
+    Accepts any data dict produced by generate_dataset() or _data_from_df().
+    Only plots parameters that are present and have sufficient samples.
+
+    Returns (common_img, velocity_img, binary_img, stats_list).
+    Any image may be None if no data is available for that group.
     """
-    M_star_solar = data["M_star_solar"]
-    D_l_pc = data["D_l_pc"]
-    D_ls_pc = data["D_ls_pc"]
-    v_perp_kms = data["v_perp_kms"]
-    u0_all = data["u0_all"]
-
-    fig, axes = plt.subplots(2, 2, figsize=(11, 9))
-    fig.suptitle("Validation vs. Literature Distributions (TdR pp. 21-26)",
-                  fontsize=15, fontweight="bold")
     stats_out = []
 
-    # --- Lens mass: bimodal mixture, expect peak/median near 0.45 Msun (p.21, Image 2) ---
-    ax = axes[0, 0]
-    ax.hist(M_star_solar, bins=50, density=True, alpha=0.6, color="steelblue", edgecolor="white",
-            label="Generated data")
-    x, y = _kde_curve(M_star_solar, (0.01, 1.2))
-    ax.plot(x, y, "navy", lw=2, label="KDE of generated data")
-    ax.axvline(0.45, color="red", ls="--", lw=1.5, label="TdR Image 2 peak (~0.45 Msun)")
-    median_mass = float(np.median(M_star_solar))
-    ax.set_xlabel("Lens Mass (Msun)")
-    ax.set_ylabel("Probability Density")
-    ax.set_title("Lens Mass M* [Image 2, p.21]")
-    ax.legend()
-    in_range = 0.30 <= median_mass <= 0.60
-    stats_out.append({
-        "parameter": "Lens Mass M* (Msun)",
-        "reference": "TdR Image 2 (p.21): bimodal, primary peak ~0.45 Msun, decline beyond 0.8 Msun",
-        "observed": f"median = {median_mass:.3f} Msun",
-        "expected": "median in [0.30, 0.60] Msun",
-        "status": "OK" if in_range else "CHECK",
-    })
+    # ── Which shared-parameter panels can we plot? ──────────────────────────
+    panels = []
+    if "M_star_solar" in data and len(data["M_star_solar"]) > 1:
+        panels.append("mass")
+    if "D_l_pc" in data and len(data["D_l_pc"]) > 1:
+        panels.append("dl")
+    if "D_ls_pc" in data and len(data["D_ls_pc"]) > 1:
+        panels.append("dls")
+    if "u0_all" in data and len(data["u0_all"]) > 1:
+        panels.append("u0")
 
-    # --- Distance to lens: bulge-peaked, expect median ~6-7 kpc (p.24, Image 5) ---
-    ax = axes[0, 1]
-    ax.hist(D_l_pc, bins=50, density=True, alpha=0.6, color="teal", edgecolor="white",
-            label="Generated data")
-    x, y = _kde_curve(D_l_pc, (300, 8500))
-    ax.plot(x, y, "darkgreen", lw=2, label="KDE of generated data")
-    ax.axvline(6800, color="red", ls="--", lw=1.5, label="TdR Image 5 bulge peak (~6800 pc)")
-    median_dl = float(np.median(D_l_pc))
-    ax.set_xlabel("Lens Distance D_l (pc)")
-    ax.set_ylabel("Probability Density")
-    ax.set_title("Distance to Lens D_l [Image 5, p.24]")
-    ax.legend()
-    in_range = 4500 <= median_dl <= 8000
-    stats_out.append({
-        "parameter": "Distance to Lens D_l (pc)",
-        "reference": "TdR Image 5 (p.24): Galactic bulge peak at 6-7 kpc (Paczynski 1991)",
-        "observed": f"median = {median_dl:.0f} pc",
-        "expected": "median in [4500, 8000] pc",
-        "status": "OK" if in_range else "CHECK",
-    })
+    common_img = None
+    if panels:
+        n = len(panels)
+        ncols = 2
+        nrows = (n + 1) // 2
+        fig, axes_grid = plt.subplots(nrows, ncols, figsize=(11, 4.5 * nrows), squeeze=False)
+        n_total = data.get("n_total", None)
+        n_label = f"n = {n_total:,}" if isinstance(n_total, int) else "uploaded dataset"
+        fig.suptitle(f"Validation vs. Literature Distributions ({n_label})",
+                     fontsize=15, fontweight="bold")
+        ax_list = [axes_grid[r][c] for r in range(nrows) for c in range(ncols)]
+        for ax in ax_list[n:]:
+            ax.axis("off")
 
-    # --- Lens-source distance: structured/irregular, ~uniform with mild peaks (p.23, Image 4) ---
-    ax = axes[1, 0]
-    ax.hist(D_ls_pc, bins=50, density=True, alpha=0.6, color="orchid", edgecolor="white",
-            label="Generated data")
-    ax.axhline(1.0 / (8000 - 100), color="red", ls="--", lw=1.5, label="Uniform[100,8000] reference")
-    median_dls = float(np.median(D_ls_pc))
-    ax.set_xlabel("Lens-Source Distance D_ls (pc)")
-    ax.set_ylabel("Probability Density")
-    ax.set_title("Lens-Source Distance D_ls [Image 4, p.23]")
-    ax.legend()
-    in_range = 1500 <= median_dls <= 4500
-    stats_out.append({
-        "parameter": "Lens-Source Distance D_ls (pc)",
-        "reference": "TdR Image 4 (p.23): irregular, roughly uniform on [100, 8000] pc, median ~2900 pc",
-        "observed": f"median = {median_dls:.0f} pc",
-        "expected": "median in [1500, 4500] pc",
-        "status": "OK" if in_range else "CHECK",
-    })
+        idx = 0
 
-    # --- Impact parameter: truncated exponential, OGLE-IV bias (p.26, Image 7) ---
-    ax = axes[1, 1]
-    ax.hist(u0_all, bins=50, density=True, alpha=0.6, color="silver", edgecolor="gray",
-            label="Generated data")
-    x_u0 = np.linspace(0, 1, 300)
-    trunc_exp_pdf = 3.0 * np.exp(-3.0 * x_u0) / (1.0 - np.exp(-3.0))
-    ax.plot(x_u0, trunc_exp_pdf, "blue", lw=2, label="Trunc. Exp(lambda=3) [TdR Image 7]")
-    ax.axhline(1.0, color="green", ls=":", lw=1.5, label="Theoretical uniform(0,1) [Paczynski 1986]")
-    ax.set_xlabel("Impact Parameter u0")
-    ax.set_ylabel("Probability Density")
-    ax.set_title("Impact Parameter u0 [Image 7, p.26]")
-    ax.legend()
+        if "mass" in panels:
+            M_star = data["M_star_solar"]
+            ax = ax_list[idx]; idx += 1
+            ax.hist(M_star, bins=50, density=True, alpha=0.6, color="steelblue",
+                    edgecolor="white", label="Data")
+            x, y = _kde_curve(M_star, (0.01, 1.2))
+            ax.plot(x, y, "navy", lw=2, label="KDE of data")
+            ax.axvline(0.45, color="red", ls="--", lw=1.5, label="TdR Image 2 peak (~0.45 Msun)")
+            ax.set_xlabel("Lens Mass (Msun)")
+            ax.set_ylabel("Probability Density")
+            ax.set_title("Lens Mass M* [Image 2, p.20]")
+            ax.legend()
+            median_mass = float(np.median(M_star))
+            in_range = 0.30 <= median_mass <= 0.60
+            stats_out.append({
+                "parameter": "Lens Mass M* (Msun)",
+                "reference": "TdR Image 2 (p.20): bimodal, primary peak ~0.45 Msun, decline beyond 0.8 Msun",
+                "observed": f"median = {median_mass:.3f} Msun",
+                "expected": "median in [0.30, 0.60] Msun",
+                "status": "OK" if in_range else "CHECK",
+            })
 
-    ks_stat, ks_p = stats.kstest(u0_all, "truncexpon", args=(1.0 * 3.0, 0, 1.0 / 3.0))
-    stats_out.append({
-        "parameter": "Impact Parameter u0",
-        "reference": "TdR Image 7 (p.26): OGLE-IV observational bias, truncated exponential (lambda=3) on [0,1]",
-        "observed": f"KS statistic = {ks_stat:.4f} (p = {ks_p:.3g}), median = {np.median(u0_all):.3f}",
-        "expected": "Distribution concentrated near 0, decaying toward 1 (not flat/uniform)",
-        "status": "OK" if ks_p > 0.01 else "CHECK",
-    })
+        if "dl" in panels:
+            D_l = data["D_l_pc"]
+            ax = ax_list[idx]; idx += 1
+            ax.hist(D_l, bins=50, density=True, alpha=0.6, color="teal",
+                    edgecolor="white", label="Data")
+            x, y = _kde_curve(D_l, (300, 8500))
+            ax.plot(x, y, "darkgreen", lw=2, label="KDE of data")
+            ax.axvline(6800, color="red", ls="--", lw=1.5, label="TdR Image 5 bulge peak (~6800 pc)")
+            ax.set_xlabel("Lens Distance D_l (pc)")
+            ax.set_ylabel("Probability Density")
+            ax.set_title("Distance to Lens D_l [Image 5, p.23]")
+            ax.legend()
+            median_dl = float(np.median(D_l))
+            in_range = 4500 <= median_dl <= 8000
+            stats_out.append({
+                "parameter": "Distance to Lens D_l (pc)",
+                "reference": "TdR Image 5 (p.23): Galactic bulge peak at 6-7 kpc (Paczynski 1991)",
+                "observed": f"median = {median_dl:.0f} pc",
+                "expected": "median in [4500, 8000] pc",
+                "status": "OK" if in_range else "CHECK",
+            })
 
-    # --- Lens velocity: Maxwell-Boltzmann, mode 200 km/s (p.25) ---
-    fig2, ax2 = plt.subplots(figsize=(7, 5))
-    ax2.hist(v_perp_kms, bins=50, density=True, alpha=0.6, color="salmon", edgecolor="white",
-             label="Generated data")
-    x_vel = np.linspace(0, v_perp_kms.max(), 300)
-    mb_scale = 200.0 / np.sqrt(2.0)
-    mb_pdf = stats.maxwell.pdf(x_vel, scale=mb_scale)
-    ax2.plot(x_vel, mb_pdf, "darkred", lw=2, label="Maxwell-Boltzmann (mode=200 km/s) [TdR p.25]")
-    ax2.set_xlabel("Transversal Velocity v_perp (km/s)")
-    ax2.set_ylabel("Probability Density")
-    ax2.set_title("Lens Velocity v_perp [TdR p.25, Rahvar 2015]")
-    ax2.legend()
-    fig2.tight_layout()
-    velocity_img = _fig_to_b64(fig2)
+        if "dls" in panels:
+            D_ls = data["D_ls_pc"]
+            ax = ax_list[idx]; idx += 1
+            ax.hist(D_ls, bins=50, density=True, alpha=0.6, color="orchid",
+                    edgecolor="white", label="Data")
+            ax.axhline(1.0 / (8000 - 100), color="red", ls="--", lw=1.5,
+                       label="Uniform[100, 8000] reference")
+            ax.set_xlabel("Lens-Source Distance D_ls (pc)")
+            ax.set_ylabel("Probability Density")
+            ax.set_title("Lens-Source Distance D_ls [Image 4, p.22]")
+            ax.legend()
+            median_dls = float(np.median(D_ls))
+            in_range = 1500 <= median_dls <= 4500
+            stats_out.append({
+                "parameter": "Lens-Source Distance D_ls (pc)",
+                "reference": "TdR Image 4 (p.22): irregular, roughly uniform on [100, 8000] pc, median ~2900 pc",
+                "observed": f"median = {median_dls:.0f} pc",
+                "expected": "median in [1500, 4500] pc",
+                "status": "OK" if in_range else "CHECK",
+            })
 
-    ks_stat_v, ks_p_v = stats.kstest(v_perp_kms, "maxwell", args=(0, mb_scale))
-    stats_out.append({
-        "parameter": "Lens Velocity v_perp (km/s)",
-        "reference": "TdR p.25 (Rahvar 2015): Maxwell-Boltzmann distribution, mode = 200 km/s",
-        "observed": f"KS statistic = {ks_stat_v:.4f} (p = {ks_p_v:.3g}), median = {np.median(v_perp_kms):.1f} km/s",
-        "expected": "Maxwell-Boltzmann shape with mode near 200 km/s",
-        "status": "OK" if ks_p_v > 0.01 else "CHECK",
-    })
+        if "u0" in panels:
+            u0 = data["u0_all"]
+            ax = ax_list[idx]; idx += 1
+            ax.hist(u0, bins=50, density=True, alpha=0.6, color="silver",
+                    edgecolor="gray", label="Data")
+            x_u0 = np.linspace(0, 1, 300)
+            trunc_exp_pdf = 3.0 * np.exp(-3.0 * x_u0) / (1.0 - np.exp(-3.0))
+            ax.plot(x_u0, trunc_exp_pdf, "blue", lw=2, label="Trunc. Exp(lambda=3) [TdR Image 7]")
+            ax.axhline(1.0, color="green", ls=":", lw=1.5,
+                       label="Uniform(0,1) [Paczynski 1986]")
+            ax.set_xlabel("Impact Parameter u0")
+            ax.set_ylabel("Probability Density")
+            ax.set_title("Impact Parameter u0 [Image 7, p.25]")
+            ax.legend()
+            ks_stat, ks_p = stats.kstest(u0, "truncexpon", args=(1.0 * 3.0, 0, 1.0 / 3.0))
+            stats_out.append({
+                "parameter": "Impact Parameter u0",
+                "reference": "TdR Image 7 (p.25): OGLE-IV observational bias, truncated exponential (lambda=3) on [0,1]",
+                "observed": f"KS statistic = {ks_stat:.4f} (p = {ks_p:.3g}), median = {np.median(u0):.3f}",
+                "expected": "Distribution concentrated near 0, decaying toward 1 (not flat/uniform)",
+                "status": "OK" if ks_p > 0.01 else "CHECK",
+            })
 
-    fig.tight_layout()
-    return _fig_to_b64(fig), velocity_img, stats_out
+        fig.tight_layout()
+        common_img = _fig_to_b64(fig)
 
+    # ── Lens velocity (separate figure) ────────────────────────────────────
+    velocity_img = None
+    if "v_perp_kms" in data and len(data["v_perp_kms"]) > 1:
+        v_perp = data["v_perp_kms"]
+        fig2, ax2 = plt.subplots(figsize=(7, 5))
+        ax2.hist(v_perp, bins=50, density=True, alpha=0.6, color="salmon",
+                 edgecolor="white", label="Data")
+        x_vel = np.linspace(0, v_perp.max(), 300)
+        mb_scale = 200.0 / np.sqrt(2.0)
+        mb_pdf = stats.maxwell.pdf(x_vel, scale=mb_scale)
+        ax2.plot(x_vel, mb_pdf, "darkred", lw=2,
+                 label="Maxwell-Boltzmann (mode=200 km/s) [TdR p.24]")
+        ax2.set_xlabel("Transversal Velocity v_perp (km/s)")
+        ax2.set_ylabel("Probability Density")
+        ax2.set_title("Lens Velocity v_perp [TdR p.24, Rahvar 2015]")
+        ax2.legend()
+        fig2.tight_layout()
+        velocity_img = _fig_to_b64(fig2)
 
-def plot_validation_binary(data):
-    """Generated binary-only histograms overlaid with TdR pp. 22, 27-29 references.
+        ks_stat_v, ks_p_v = stats.kstest(v_perp, "maxwell", args=(0, mb_scale))
+        stats_out.append({
+            "parameter": "Lens Velocity v_perp (km/s)",
+            "reference": "TdR p.24 (Rahvar 2015): Maxwell-Boltzmann distribution, mode = 200 km/s",
+            "observed": f"KS statistic = {ks_stat_v:.4f} (p = {ks_p_v:.3g}), median = {np.median(v_perp):.1f} km/s",
+            "expected": "Maxwell-Boltzmann shape with mode near 200 km/s",
+            "status": "OK" if ks_p_v > 0.01 else "CHECK",
+        })
 
-    Returns (image_b64, stats) or (None, []) if n_binary == 0.
-    """
-    if data["n_binary"] == 0:
-        return None, []
+    # ── Binary parameters ───────────────────────────────────────────────────
+    binary_img = None
+    if data.get("n_binary", 0) > 0:
+        binary_panels = []
+        if "q_binary" in data and len(data["q_binary"]) > 1:
+            binary_panels.append("q")
+        if "a_pc_binary" in data and len(data["a_pc_binary"]) > 1:
+            binary_panels.append("a")
+        if "e_binary" in data and len(data["e_binary"]) > 1:
+            binary_panels.append("e")
+        if "alpha_ref_binary" in data and len(data["alpha_ref_binary"]) > 1:
+            binary_panels.append("alpha")
 
-    q_binary = data["q_binary"]
-    a_pc_binary = data["a_pc_binary"]
-    e_binary = data["e_binary"]
-    alpha_ref_binary = data["alpha_ref_binary"]
-    stats_out = []
+        if binary_panels:
+            n_b = len(binary_panels)
+            ncols_b = min(2, n_b)
+            nrows_b = (n_b + 1) // 2
+            fig3, axes3 = plt.subplots(nrows_b, ncols_b, figsize=(11, 4.5 * nrows_b),
+                                        squeeze=False)
+            fig3.suptitle(
+                f"Validation of Binary-Lens Parameters (n = {data['n_binary']:,})",
+                fontsize=15, fontweight="bold",
+            )
+            ax_list3 = [axes3[r][c] for r in range(nrows_b) for c in range(ncols_b)]
+            for ax in ax_list3[n_b:]:
+                ax.axis("off")
 
-    fig, axes = plt.subplots(2, 2, figsize=(11, 9))
-    fig.suptitle("Validation of Binary-Lens Parameters vs. Literature (TdR pp. 22, 27-29)",
-                  fontsize=15, fontweight="bold")
+            idx3 = 0
 
-    # --- Mass ratio q: log-normal, peak ~1.43e-3 (p.22, Image 3) ---
-    ax = axes[0, 0]
-    log10_q = np.log10(q_binary)
-    ax.hist(log10_q, bins=40, density=True, alpha=0.6, color="mediumpurple", edgecolor="white",
-            label="Generated data")
-    ax.axvline(np.log10(1.43e-3), color="red", ls="--", lw=1.5, label="TdR Image 3 peak (q~1.43e-3)")
-    median_q = float(np.median(q_binary))
-    ax.set_xlabel("log10(q)")
-    ax.set_ylabel("Probability Density")
-    ax.set_title("Mass Ratio q [Image 3, p.22]")
-    ax.legend()
-    in_range = 1e-4 <= median_q <= 1e-2
-    stats_out.append({
-        "parameter": "Mass Ratio q",
-        "reference": "TdR Image 3 (p.22): log-normal, median ~1.43e-3 (NASA Exoplanet Archive)",
-        "observed": f"median = {median_q:.2e}",
-        "expected": "median in [1e-4, 1e-2]",
-        "status": "OK" if in_range else "CHECK",
-    })
+            if "q" in binary_panels:
+                q_bin = data["q_binary"]
+                ax = ax_list3[idx3]; idx3 += 1
+                log10_q = np.log10(q_bin)
+                ax.hist(log10_q, bins=40, density=True, alpha=0.6, color="mediumpurple",
+                        edgecolor="white", label="Data")
+                ax.axvline(np.log10(1.43e-3), color="red", ls="--", lw=1.5,
+                           label="TdR Image 3 peak (q~1.43e-3)")
+                ax.set_xlabel("log10(q)")
+                ax.set_ylabel("Probability Density")
+                ax.set_title("Mass Ratio q [Image 3, p.21]")
+                ax.legend()
+                median_q = float(np.median(q_bin))
+                in_range = 1e-4 <= median_q <= 1e-2
+                stats_out.append({
+                    "parameter": "Mass Ratio q",
+                    "reference": "TdR Image 3 (p.21): log-normal, median ~1.43e-3 (NASA Exoplanet Archive)",
+                    "observed": f"median = {median_q:.2e}",
+                    "expected": "median in [1e-4, 1e-2]",
+                    "status": "OK" if in_range else "CHECK",
+                })
 
-    # --- Semi-major axis a: bimodal log-space, dominant peak 1e-7..1e-6, secondary ~1e-5 (p.27, Image 8) ---
-    ax = axes[0, 1]
-    log10_a = np.log10(a_pc_binary)
-    ax.hist(log10_a, bins=40, density=True, alpha=0.6, color="goldenrod", edgecolor="white",
-            label="Generated data")
-    ax.axvline(-6.4, color="red", ls="--", lw=1.5, label="Dominant peak ~1e-6.4 pc [Image 8]")
-    ax.axvline(-5.0, color="blue", ls="--", lw=1.5, label="Secondary bump ~1e-5 pc [Image 8]")
-    median_a = float(np.median(a_pc_binary))
-    ax.set_xlabel("log10(a) [pc]")
-    ax.set_ylabel("Probability Density")
-    ax.set_title("Semi-major Axis a [Image 8, p.27]")
-    ax.legend()
-    in_range = -7.5 <= np.log10(median_a) <= -5.0
-    stats_out.append({
-        "parameter": "Semi-major Axis a (pc)",
-        "reference": "TdR Image 8 (p.27): bimodal in log-space, dominant peak ~1e-6.4 pc, secondary ~1e-5 pc",
-        "observed": f"median = {median_a:.2e} pc",
-        "expected": "median in [10^-7.5, 10^-5] pc",
-        "status": "OK" if in_range else "CHECK",
-    })
+            if "a" in binary_panels:
+                a_bin = data["a_pc_binary"]
+                ax = ax_list3[idx3]; idx3 += 1
+                log10_a = np.log10(a_bin)
+                ax.hist(log10_a, bins=40, density=True, alpha=0.6, color="goldenrod",
+                        edgecolor="white", label="Data")
+                ax.axvline(-6.4, color="red", ls="--", lw=1.5,
+                           label="Dominant peak ~1e-6.4 pc [Image 8]")
+                ax.axvline(-5.0, color="blue", ls="--", lw=1.5,
+                           label="Secondary bump ~1e-5 pc [Image 8]")
+                ax.set_xlabel("log10(a) [pc]")
+                ax.set_ylabel("Probability Density")
+                ax.set_title("Semi-major Axis a [Image 8, p.26]")
+                ax.legend()
+                median_a = float(np.median(a_bin))
+                in_range = -7.5 <= np.log10(median_a) <= -5.0
+                stats_out.append({
+                    "parameter": "Semi-major Axis a (pc)",
+                    "reference": "TdR Image 8 (p.26): bimodal in log-space, dominant peak ~1e-6.4 pc, secondary ~1e-5 pc",
+                    "observed": f"median = {median_a:.2e} pc",
+                    "expected": "median in [10^-7.5, 10^-5] pc",
+                    "status": "OK" if in_range else "CHECK",
+                })
 
-    # --- Eccentricity e: Beta(1.5, 12), mode ~0.043 (p.27-28, Image 9) ---
-    ax = axes[1, 0]
-    ax.hist(e_binary, bins=40, density=True, alpha=0.6, color="cornflowerblue", edgecolor="white",
-            label="Generated data")
-    x_ecc = np.linspace(0, 0.99, 300)
-    beta_pdf = stats.beta.pdf(x_ecc, 1.5, 12.0)
-    ax.plot(x_ecc, beta_pdf, "darkblue", lw=2, label="Beta(1.5, 12) [TdR Image 9]")
-    ax.set_xlabel("Orbital Eccentricity e")
-    ax.set_ylabel("Probability Density")
-    ax.set_title("Eccentricity e [Image 9, p.27-28]")
-    ax.legend()
-    ks_stat_e, ks_p_e = stats.kstest(e_binary, "beta", args=(1.5, 12.0))
-    stats_out.append({
-        "parameter": "Orbital Eccentricity e",
-        "reference": "TdR Image 9 (p.27-28): exponential-like decay, mode ~0.043, modeled as Beta(1.5, 12)",
-        "observed": f"KS statistic = {ks_stat_e:.4f} (p = {ks_p_e:.3g}), median = {np.median(e_binary):.3f}",
-        "expected": "Distribution concentrated near 0 with long tail toward 1",
-        "status": "OK" if ks_p_e > 0.01 else "CHECK",
-    })
+            if "e" in binary_panels:
+                e_bin = data["e_binary"]
+                ax = ax_list3[idx3]; idx3 += 1
+                ax.hist(e_bin, bins=40, density=True, alpha=0.6, color="cornflowerblue",
+                        edgecolor="white", label="Data")
+                x_ecc = np.linspace(0, 0.99, 300)
+                beta_pdf = stats.beta.pdf(x_ecc, 1.5, 12.0)
+                ax.plot(x_ecc, beta_pdf, "darkblue", lw=2, label="Beta(1.5, 12) [TdR Image 9]")
+                ax.set_xlabel("Orbital Eccentricity e")
+                ax.set_ylabel("Probability Density")
+                ax.set_title("Eccentricity e [Image 9, p.26-27]")
+                ax.legend()
+                ks_stat_e, ks_p_e = stats.kstest(e_bin, "beta", args=(1.5, 12.0))
+                stats_out.append({
+                    "parameter": "Orbital Eccentricity e",
+                    "reference": "TdR Image 9 (p.26-27): exponential-like decay, mode ~0.043, modeled as Beta(1.5, 12)",
+                    "observed": f"KS statistic = {ks_stat_e:.4f} (p = {ks_p_e:.3g}), median = {np.median(e_bin):.3f}",
+                    "expected": "Distribution concentrated near 0 with long tail toward 1",
+                    "status": "OK" if ks_p_e > 0.01 else "CHECK",
+                })
 
-    # --- Trajectory angle alpha_ref: uniform(0, 2pi) (p.29) ---
-    ax = axes[1, 1]
-    ax.hist(alpha_ref_binary, bins=40, density=True, alpha=0.6, color="lightcoral", edgecolor="white",
-            label="Generated data")
-    ax.axhline(1.0 / (2 * np.pi), color="red", ls="--", lw=1.5, label="Uniform(0, 2*pi) [TdR p.29]")
-    ax.set_xlabel("Trajectory Angle alpha_ref (rad)")
-    ax.set_ylabel("Probability Density")
-    ax.set_title("Trajectory Angle alpha_ref [p.29]")
-    ax.legend()
-    ks_stat_a, ks_p_a = stats.kstest(alpha_ref_binary, "uniform", args=(0, 2 * np.pi))
-    stats_out.append({
-        "parameter": "Trajectory Angle alpha_ref (rad)",
-        "reference": "TdR p.29: 'theoretically completely random' -> uniform(0, 2*pi)",
-        "observed": f"KS statistic = {ks_stat_a:.4f} (p = {ks_p_a:.3g})",
-        "expected": "Flat (uniform) distribution over [0, 2*pi]",
-        "status": "OK" if ks_p_a > 0.01 else "CHECK",
-    })
+            if "alpha" in binary_panels:
+                alpha_bin = data["alpha_ref_binary"]
+                ax = ax_list3[idx3]; idx3 += 1
+                ax.hist(alpha_bin, bins=40, density=True, alpha=0.6, color="lightcoral",
+                        edgecolor="white", label="Data")
+                ax.axhline(1.0 / (2 * np.pi), color="red", ls="--", lw=1.5,
+                           label="Uniform(0, 2*pi) [TdR p.28]")
+                ax.set_xlabel("Trajectory Angle alpha_ref (rad)")
+                ax.set_ylabel("Probability Density")
+                ax.set_title("Trajectory Angle alpha_ref [p.28]")
+                ax.legend()
+                ks_stat_a, ks_p_a = stats.kstest(alpha_bin, "uniform", args=(0, 2 * np.pi))
+                stats_out.append({
+                    "parameter": "Trajectory Angle alpha_ref (rad)",
+                    "reference": "TdR p.28: theoretically completely random -> uniform(0, 2*pi)",
+                    "observed": f"KS statistic = {ks_stat_a:.4f} (p = {ks_p_a:.3g})",
+                    "expected": "Flat (uniform) distribution over [0, 2*pi]",
+                    "status": "OK" if ks_p_a > 0.01 else "CHECK",
+                })
 
-    fig.tight_layout()
-    return _fig_to_b64(fig), stats_out
+            fig3.tight_layout()
+            binary_img = _fig_to_b64(fig3)
+
+    return common_img, velocity_img, binary_img, stats_out

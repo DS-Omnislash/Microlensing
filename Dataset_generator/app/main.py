@@ -5,8 +5,10 @@ import uuid
 from collections import OrderedDict
 from pathlib import Path
 
+import pandas as pd
+
 # pyrefly: ignore [missing-import]
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 # pyrefly: ignore [missing-import]
 from fastapi.responses import StreamingResponse
 # pyrefly: ignore [missing-import]
@@ -74,6 +76,53 @@ def _build_filename(data: dict, ext: str) -> str:
     return f"Microlensing_Dataset_{data['n_total']}_{pct_str}_{data['n_time']}pts{preset_part}.{ext}"
 
 
+def _data_from_df(df: pd.DataFrame) -> dict:
+    """Build a data dict suitable for validation from an uploaded DataFrame."""
+    if "event_lenses" in df.columns:
+        n_binary = int((df["event_lenses"] == 2).sum())
+        n_single = int((df["event_lenses"] == 1).sum())
+    else:
+        n_binary = 0
+        n_single = len(df)
+
+    time_cols = [c for c in df.columns if c.startswith("t_") and c[2:].isdigit()]
+
+    data: dict = {
+        "df": df,
+        "n_total": len(df),
+        "n_single": n_single,
+        "n_binary": n_binary,
+        "n_time": len(time_cols),
+    }
+
+    col_map = [
+        ("M_star_solar", "M_star_solar"),
+        ("D_l_pc",       "D_l_pc"),
+        ("D_ls_pc",      "D_ls_pc"),
+        ("v_perp_kms",   "v_perp_kms"),
+        ("u0",           "u0_all"),
+        ("t_E_days",     "t_E_days"),
+    ]
+    for df_col, key in col_map:
+        if df_col in df.columns:
+            data[key] = df[df_col].dropna().to_numpy(dtype=float)
+
+    if n_binary > 0 and "event_lenses" in df.columns:
+        binary_mask = df["event_lenses"] == 2
+        for df_col, key in [
+            ("q",            "q_binary"),
+            ("a_pc",         "a_pc_binary"),
+            ("eccentricity", "e_binary"),
+            ("alpha_ref_rad","alpha_ref_binary"),
+        ]:
+            if df_col in df.columns:
+                arr = df.loc[binary_mask, df_col].dropna().to_numpy(dtype=float)
+                if len(arr) > 0:
+                    data[key] = arr
+
+    return data
+
+
 class GenerateRequest(BaseModel):
     n_total: int = Field(..., ge=N_TOTAL_MIN, le=N_TOTAL_MAX)
     binary_percent: float = Field(..., ge=BINARY_PCT_MIN, le=BINARY_PCT_MAX)
@@ -126,7 +175,6 @@ def api_generate(req: GenerateRequest):
             "distributions_binary": plotting.plot_distributions_binary(data),
             "sample_single_lightcurves": plotting.plot_sample_single_lightcurves(data),
             "sample_binary_lightcurves": plotting.plot_sample_binary_lightcurves(data),
-            "coverage": plotting.plot_coverage(data),
         },
     }
 
@@ -153,8 +201,7 @@ def api_sample_binary(dataset_id: str, seed: int = 42):
 def api_validate(dataset_id: str):
     data = _get_dataset(dataset_id)
 
-    common_img, velocity_img, common_stats = plotting.plot_validation_common(data)
-    binary_img, binary_stats = plotting.plot_validation_binary(data)
+    common_img, velocity_img, binary_img, stats_list = plotting.plot_validation_available(data)
 
     return {
         "dataset_id": dataset_id,
@@ -163,7 +210,41 @@ def api_validate(dataset_id: str):
             "validation_velocity": velocity_img,
             "validation_binary": binary_img,
         },
-        "stats": common_stats + binary_stats,
+        "stats": stats_list,
+    }
+
+
+@app.post("/api/upload-validate")
+async def api_upload_validate(file: UploadFile = File(...)):
+    content_bytes = await file.read()
+    fname = (file.filename or "").lower()
+    try:
+        if fname.endswith(".pkl"):
+            df = pd.read_pickle(io.BytesIO(content_bytes))
+        else:
+            df = pd.read_csv(io.StringIO(content_bytes.decode("utf-8", errors="replace")))
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Could not parse file: {exc}")
+
+    if not isinstance(df, pd.DataFrame):
+        raise HTTPException(status_code=422, detail="File does not contain a tabular dataset.")
+
+    data = _data_from_df(df)
+    dataset_id = _store_dataset(data)
+
+    time_cols = [c for c in df.columns if c.startswith("t_") and c[2:].isdigit()]
+    param_cols = [c for c in df.columns if not (c.startswith("t_") and c[2:].isdigit())]
+    binary_pct = round(100.0 * data["n_binary"] / data["n_total"], 1) if data["n_total"] > 0 else 0.0
+
+    return {
+        "dataset_id": dataset_id,
+        "n_total": data["n_total"],
+        "n_single": data["n_single"],
+        "n_binary": data["n_binary"],
+        "binary_percent": binary_pct,
+        "n_time": data["n_time"],
+        "param_columns": param_cols,
+        "has_lightcurves": len(time_cols) > 0,
     }
 
 
