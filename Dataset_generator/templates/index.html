@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -25,7 +25,7 @@
                     <label for="n_total">Number of total events</label>
                     <input type="number" id="n_total" name="n_total"
                            min="{{ n_total_min }}" max="{{ n_total_max }}" value="1000" step="1" required>
-                    <p class="hint">Between {{ n_total_min }} and {{ "{:,}".format(n_total_max) }}. Larger datasets take longer to generate, especially with a higher binary-lens fraction.</p>
+                    <p class="hint">Between {{ n_total_min }} and {{ "{:,}".format(n_total_max) }}. The larger the number, the longer the wait and the more memory and CPU will be consumed &mdash; large requests (above ~50,000) can take several minutes.</p>
                 </div>
 
                 <div class="field">

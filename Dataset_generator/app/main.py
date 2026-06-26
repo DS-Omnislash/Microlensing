@@ -25,8 +25,8 @@ app = FastAPI(title="Microlensing Dataset Generator")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
-# Limits to keep generation requests responsive in this demo app.
-N_TOTAL_MIN, N_TOTAL_MAX = 10, 20_000
+# Generation limits.
+N_TOTAL_MIN, N_TOTAL_MAX = 10, 500_000
 N_TIME_MIN, N_TIME_MAX = 50, 1_000
 BINARY_PCT_MIN, BINARY_PCT_MAX = 0.0, 50.0
 
