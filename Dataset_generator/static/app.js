@@ -1,4 +1,4 @@
-const form = document.getElementById("generate-form");
+﻿const form = document.getElementById("generate-form");
 const generateBtn = document.getElementById("generate-btn");
 const generateStatus = document.getElementById("generate-status");
 const resultsSection = document.getElementById("results-section");
@@ -6,6 +6,7 @@ const validationSection = document.getElementById("validation-section");
 const validateBtn = document.getElementById("validate-btn");
 const validateStatus = document.getElementById("validate-status");
 const downloadLink = document.getElementById("download-link");
+const downloadPklLink = document.getElementById("download-pkl-link");
 const splitPreview = document.getElementById("split-preview");
 
 const nTotalInput = document.getElementById("n_total");
@@ -149,6 +150,7 @@ form.addEventListener("submit", async (e) => {
         }
 
         downloadLink.href = `/api/download/${currentDatasetId}`;
+        downloadPklLink.href = `/api/download-pkl/${currentDatasetId}`;
         resultsSection.hidden = false;
         generateStatus.textContent = "Done.";
     } catch (err) {

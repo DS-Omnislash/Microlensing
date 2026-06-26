@@ -52,6 +52,28 @@ def _get_dataset(dataset_id: str) -> dict:
     return data
 
 
+def _select_columns(df, data: dict):
+    """Return df filtered to the columns chosen by the user, or the full df if none specified."""
+    selected = data.get("selected_params", [])
+    if not selected:
+        return df
+    selected_set = set(selected)
+    time_cols = [c for c in df.columns if c.startswith("t_") and c[2:].isdigit()]
+    keep = set()
+    for s in selected_set:
+        if s == "__lightcurves__":
+            keep.update(time_cols)
+        elif s in df.columns:
+            keep.add(s)
+    return df[[c for c in df.columns if c in keep]]
+
+
+def _build_filename(data: dict, ext: str) -> str:
+    pct_str = f"{data['binary_percent']:g}%"
+    preset_part = f"_{data['preset']}" if data.get("preset") else ""
+    return f"Microlensing_Dataset_{data['n_total']}_{pct_str}_{data['n_time']}pts{preset_part}.{ext}"
+
+
 class GenerateRequest(BaseModel):
     n_total: int = Field(..., ge=N_TOTAL_MIN, le=N_TOTAL_MAX)
     binary_percent: float = Field(..., ge=BINARY_PCT_MIN, le=BINARY_PCT_MAX)
@@ -148,29 +170,32 @@ def api_validate(dataset_id: str):
 @app.get("/api/download/{dataset_id}")
 def api_download(dataset_id: str):
     data = _get_dataset(dataset_id)
-    df = data["df"]
-
-    selected = data.get("selected_params", [])
-    if selected:
-        selected_set = set(selected)
-        time_cols = [c for c in df.columns if c.startswith("t_") and c[2:].isdigit()]
-        keep = set()
-        for s in selected_set:
-            if s == "__lightcurves__":
-                keep.update(time_cols)
-            elif s in df.columns:
-                keep.add(s)
-        df = df[[c for c in df.columns if c in keep]]
+    df = _select_columns(data["df"], data)
 
     buf = io.StringIO()
     df.to_csv(buf, index=False, float_format="%.10g")
     buf.seek(0)
 
-    pct_str = f"{data['binary_percent']:g}%"
-    preset_part = f"_{data['preset']}" if data.get("preset") else ""
-    filename = f"Microlensing_Dataset_{data['n_total']}_{pct_str}_{data['n_time']}pts{preset_part}.csv"
+    filename = _build_filename(data, "csv")
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.get("/api/download-pkl/{dataset_id}")
+def api_download_pkl(dataset_id: str):
+    data = _get_dataset(dataset_id)
+    df = _select_columns(data["df"], data)
+
+    buf = io.BytesIO()
+    df.to_pickle(buf)
+    buf.seek(0)
+
+    filename = _build_filename(data, "pkl")
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="application/octet-stream",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
