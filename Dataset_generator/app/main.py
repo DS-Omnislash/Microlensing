@@ -1,4 +1,4 @@
-"""FastAPI application for generating synthetic microlensing datasets."""
+﻿"""FastAPI application for generating synthetic microlensing datasets."""
 
 import io
 import uuid
@@ -28,7 +28,7 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 # Generation limits.
 N_TOTAL_MIN, N_TOTAL_MAX = 10, 500_000
 N_TIME_MIN, N_TIME_MAX = 50, 1_000
-BINARY_PCT_MIN, BINARY_PCT_MAX = 0.0, 50.0
+BINARY_PCT_MIN, BINARY_PCT_MAX = 0.0, 100.0
 
 # Simple in-memory LRU cache of generated datasets.
 MAX_CACHED_DATASETS = 5
