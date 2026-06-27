@@ -23,6 +23,9 @@ let currentPreset = null;
 const refreshSingleBtn = document.getElementById("refresh-single-btn");
 const refreshBinaryBtn = document.getElementById("refresh-binary-btn");
 const colCheckboxes = document.querySelectorAll(".col-check");
+const isMagCheckItem = document.getElementById("Is-mag-check-item");
+const isMagCheck = document.getElementById("Is-mag-check");
+const formatRadios = document.querySelectorAll('input[name="use_magnitudes"]');
 const colsAllBtn = document.getElementById("cols-all-btn");
 const colsNoneBtn = document.getElementById("cols-none-btn");
 
@@ -57,6 +60,24 @@ binaryPercentInput.addEventListener("input", () => {
 nTotalInput.addEventListener("input", updateSplitPreview);
 updateSplitPreview();
 
+
+// ── Format toggle: A(t) vs I(t) ──────────────────────────────────────────
+function updateFormatToggle() {
+    const useMag = document.querySelector('input[name="use_magnitudes"]:checked').value === "1";
+    if (useMag) {
+        isMagCheck.disabled = false;
+        isMagCheck.checked = true;
+        isMagCheckItem.style.opacity = "1";
+        isMagCheckItem.style.pointerEvents = "auto";
+    } else {
+        isMagCheck.disabled = true;
+        isMagCheck.checked = false;
+        isMagCheckItem.style.opacity = "0.4";
+        isMagCheckItem.style.pointerEvents = "none";
+    }
+}
+formatRadios.forEach(r => r.addEventListener("change", updateFormatToggle));
+
 const PRESET_CLASSIFICATION  = new Set(["event_lenses", "__lightcurves__"]);
 const PRESET_SINGLE_LENS     = new Set(["M_star_solar", "D_l_pc", "D_ls_pc", "D_s_pc", "v_perp_kms", "u0", "r_E_m", "t_E_days", "__lightcurves__"]);
 const PRESET_MODEL           = new Set(["__lightcurves__"]);
@@ -67,7 +88,7 @@ function applyPreset(preset, name) {
     currentPreset = name;
 }
 
-colsAllBtn.addEventListener("click", () => { colCheckboxes.forEach(cb => cb.checked = true);  currentPreset = null; });
+colsAllBtn.addEventListener("click", () => { colCheckboxes.forEach(cb => { if (!cb.disabled) cb.checked = true; }); currentPreset = null; });
 colsNoneBtn.addEventListener("click", () => { colCheckboxes.forEach(cb => cb.checked = false); currentPreset = null; });
 document.getElementById("cols-classification-btn").addEventListener("click", () => applyPreset(PRESET_CLASSIFICATION, "Classification"));
 document.getElementById("cols-single-btn").addEventListener("click",         () => applyPreset(PRESET_SINGLE_LENS,    "Single_Lens"));
@@ -257,12 +278,14 @@ form.addEventListener("submit", async (e) => {
         .filter(cb => cb.checked)
         .map(cb => cb.value);
 
+    const useMagnitudes = document.querySelector('input[name="use_magnitudes"]:checked').value === "1";
     const payload = {
         n_total: parseInt(nTotalInput.value, 10),
         binary_percent: parseFloat(binaryPercentInput.value),
         n_time: parseInt(nTimeInput.value, 10),
         selected_params: selectedParams,
         preset: currentPreset || "",
+        use_magnitudes: useMagnitudes,
     };
 
     generateBtn.disabled = true;

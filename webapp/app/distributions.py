@@ -160,3 +160,15 @@ def sample_trajectory_angle(n, rng):
     Binary-only. "Theoretically completely random" -> uniform on [0, 2*pi].
     """
     return rng.uniform(0.0, 2.0 * np.pi, size=n).astype(np.float64)
+
+
+def sample_baseline_magnitude(n, rng):
+    """Source baseline I-band magnitude I_s [mag] - scaled Beta (OGLE-IV, Mroz 2019).
+
+    Beta(15, 6) scaled to [14, 22]: mode ~19.85 mag.
+    Matches the observed OGLE-IV distribution: left-skewed with a long tail toward
+    bright (low-magnitude) stars and a steep drop after the peak at ~19.86 mag.
+    """
+    MAG_MIN, MAG_MAX = np.float64(14.0), np.float64(22.0)
+    beta_samples = rng.beta(15.0, 6.0, size=n)
+    return (MAG_MIN + beta_samples * (MAG_MAX - MAG_MIN)).astype(np.float64)

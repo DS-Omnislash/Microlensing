@@ -275,6 +275,8 @@ def plot_validation_available(data):
         panels.append("dls")
     if "u0_all" in data and len(data["u0_all"]) > 1:
         panels.append("u0")
+    if "I_s_mag" in data and data["I_s_mag"] is not None and len(data["I_s_mag"]) > 1:
+        panels.append("is_mag")
 
     common_img = None
     if panels:
@@ -378,6 +380,34 @@ def plot_validation_available(data):
                 "observed": f"KS statistic = {ks_stat:.4f} (p = {ks_p:.3g}), median = {np.median(u0):.3f}",
                 "expected": "Distribution concentrated near 0, decaying toward 1 (not flat/uniform)",
                 "status": "OK" if ks_p > 0.01 else "CHECK",
+            })
+
+        if "is_mag" in panels:
+            I_s = data["I_s_mag"]
+            ax = ax_list[idx]; idx += 1
+            ax.hist(I_s, bins=50, density=True, alpha=0.6, color="#e67e22",
+                    edgecolor="white", label="Data")
+            x_is = np.linspace(14, 22, 300)
+            z_ref = (x_is - 14.0) / 8.0
+            beta_pdf = stats.beta.pdf(z_ref, 15.0, 6.0) / 8.0
+            ax.plot(x_is, beta_pdf, "darkorange", lw=2,
+                    label="Beta(15,6) scaled [TdR Image 10]")
+            ax.axvline(np.median(I_s), color="navy", ls="--", lw=1.5,
+                       label=f"Median: {np.median(I_s):.2f} mag")
+            ax.set_xlabel("Source Baseline Magnitude I_s (mag)")
+            ax.set_ylabel("Probability Density")
+            ax.set_title("Source Baseline Magnitude I_s [Image 10, p.28]")
+            ax.legend()
+            z_data = np.clip((I_s - 14.0) / 8.0, 0.0, 1.0)
+            ks_stat_is, ks_p_is = stats.kstest(z_data, "beta", args=(15.0, 6.0))
+            median_is = float(np.median(I_s))
+            in_range_is = 19.0 <= median_is <= 20.5
+            stats_out.append({
+                "parameter": "Source Baseline Magnitude I_s (mag)",
+                "reference": "TdR Image 10 (p.28): OGLE-IV, Beta(15,6) scaled to [14,22], mode ~19.85 mag",
+                "observed": f"KS statistic = {ks_stat_is:.4f} (p = {ks_p_is:.3g}), median = {median_is:.2f} mag",
+                "expected": "Distribution peaking near 19.85 mag, range [14, 22] mag",
+                "status": "OK" if in_range_is else "CHECK",
             })
 
         fig.tight_layout()

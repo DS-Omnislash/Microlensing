@@ -72,8 +72,9 @@ def _select_columns(df, data: dict):
 
 def _build_filename(data: dict, ext: str) -> str:
     pct_str = f"{data['binary_percent']:g}%"
+    fmt_part = "_I(t)" if data.get("use_magnitudes") else "_A(t)"
     preset_part = f"_{data['preset']}" if data.get("preset") else ""
-    return f"Microlensing_Dataset_{data['n_total']}_{pct_str}_{data['n_time']}pts{preset_part}.{ext}"
+    return f"Microlensing_Dataset_{data['n_total']}_{pct_str}_{data['n_time']}pts{fmt_part}{preset_part}.{ext}"
 
 
 def _data_from_df(df: pd.DataFrame) -> dict:
@@ -107,6 +108,11 @@ def _data_from_df(df: pd.DataFrame) -> dict:
         if df_col in df.columns:
             data[key] = df[df_col].dropna().to_numpy(dtype=float)
 
+    if "I_s_mag" in df.columns:
+        arr = df["I_s_mag"].dropna().to_numpy(dtype=float)
+        if len(arr) > 0:
+            data["I_s_mag"] = arr
+
     if n_binary > 0 and "event_lenses" in df.columns:
         binary_mask = df["event_lenses"] == 2
         for df_col, key in [
@@ -129,6 +135,7 @@ class GenerateRequest(BaseModel):
     n_time: int = Field(..., ge=N_TIME_MIN, le=N_TIME_MAX)
     selected_params: list[str] = Field(default_factory=list)
     preset: str = Field(default="")
+    use_magnitudes: bool = Field(default=False)
 
 
 @app.get("/")
@@ -159,6 +166,7 @@ def api_generate(req: GenerateRequest):
         n_total=req.n_total,
         binary_fraction=req.binary_percent / 100.0,
         n_time=req.n_time,
+        use_magnitudes=req.use_magnitudes,
     )
     data["selected_params"] = req.selected_params
     data["binary_percent"] = req.binary_percent

@@ -184,4 +184,22 @@ PARAMETER_INFO = [
             "random, so it is sampled uniformly over a full circle."
         ),
     },
+    {
+        "key": "I_s_mag",
+        "name": "Source Baseline Magnitude (I_s)",
+        "unit": "magnitudes (mag)",
+        "applies_to": "All events (I(t) mode only)",
+        "distribution": "Scaled Beta distribution",
+        "formula": "Beta(15, 6) scaled to [14, 22], mode ~19.85 mag",
+        "reference": "TdR Image 10, p.28 (OGLE-IV, Mroz et al. 2019)",
+        "explanation": (
+            "The apparent I-band brightness of the background source star at "
+            "baseline (no lensing). Required to convert the dimensionless "
+            "amplification A(t) into an observable magnitude light curve via "
+            "I(t) = I_s - 2.5 log10 A(t). Derived from the OGLE-IV microlensing "
+            "event catalogue: the distribution peaks near I_s ~ 19.9 mag, "
+            "reflecting the stellar luminosity function of the Galactic Bulge "
+            "as sampled by OGLE-IV detection efficiency."
+        ),
+    },
 ]

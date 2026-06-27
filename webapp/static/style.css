@@ -758,3 +758,28 @@ input[type="file"] {
     height: 160px;
     margin: 0.25rem 0 0.125rem;
 }
+/* ─── Format toggle (radio) ──────────────────────────────────── */
+.radio-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.375rem;
+}
+
+.radio-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--text);
+    cursor: pointer;
+    user-select: none;
+}
+
+.radio-item input[type="radio"] {
+    accent-color: var(--ink);
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    margin: 0;
+}

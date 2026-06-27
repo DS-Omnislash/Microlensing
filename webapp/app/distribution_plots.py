@@ -12,6 +12,7 @@ import numpy as np
 from scipy.stats import gaussian_kde
 
 from .distributions import (
+    sample_baseline_magnitude,
     sample_eccentricity,
     sample_impact_parameter,
     sample_lens_mass,
@@ -129,6 +130,10 @@ def _compute_all() -> dict:
         "eccentricity": _fig(
             sample_eccentricity(n, rng),
             "Eccentricity e", x_lo=0.0, x_hi=0.55,
+        ),
+        "I_s_mag": _fig(
+            sample_baseline_magnitude(n, rng),
+            "I_s (mag)", x_lo=14.0, x_hi=22.0,
         ),
     }
 

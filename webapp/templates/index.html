@@ -56,6 +56,21 @@
                 </div>
 
                 <div class="field">
+                    <label>Light curve format</label>
+                    <div class="radio-row">
+                        <label class="radio-item">
+                            <input type="radio" name="use_magnitudes" value="0" id="fmt-amplification" checked>
+                            <span>A(t) &mdash; dimensionless amplification</span>
+                        </label>
+                        <label class="radio-item">
+                            <input type="radio" name="use_magnitudes" value="1" id="fmt-magnitudes">
+                            <span>I(t) &mdash; I-band magnitude</span>
+                        </label>
+                    </div>
+                    <p class="hint">A(t) stores the raw amplification ratio. I(t) converts to observable I-band magnitudes using the source baseline I_s sampled from the OGLE-IV distribution, via I(t) = I_s &minus; 2.5&thinsp;log&#x2081;&#x2080; A(t).</p>
+                </div>
+
+                <div class="field">
                     <div class="field-label-row">
                         <label>Output columns</label>
                         <span class="col-toggles">
@@ -125,6 +140,10 @@
                         <label class="checkbox-item">
                             <input type="checkbox" class="col-check" value="alpha_ref_rad" checked>
                             <span>Trajectory angle <code class="col-code">alpha_ref_rad</code></span>
+                        </label>
+                        <label class="checkbox-item" id="Is-mag-check-item" style="opacity:0.4;pointer-events:none;">
+                            <input type="checkbox" class="col-check" value="I_s_mag" id="Is-mag-check" disabled>
+                            <span>Source baseline magnitude <code class="col-code">I_s_mag</code></span>
                         </label>
                         <label class="checkbox-item checkbox-item--curves">
                             <input type="checkbox" class="col-check" value="__lightcurves__" checked>

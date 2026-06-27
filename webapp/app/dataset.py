@@ -13,7 +13,7 @@ from .lightcurves import (
 SEED = 42
 
 
-def generate_dataset(n_total: int, binary_fraction: float, n_time: int, seed: int = SEED):
+def generate_dataset(n_total: int, binary_fraction: float, n_time: int, seed: int = SEED, use_magnitudes: bool = False):
     """Generate a synthetic microlensing dataset.
 
     Parameters
@@ -22,6 +22,8 @@ def generate_dataset(n_total: int, binary_fraction: float, n_time: int, seed: in
     binary_fraction: fraction (0-1) of events that are binary-lens events.
     n_time: number of time points sampled per light curve.
     seed: RNG seed for reproducibility.
+    use_magnitudes: if True, convert A(t) light curves to I-band magnitudes
+        using I(t) = I_s - 2.5*log10(A(t)), and add I_s_mag column.
 
     Returns a dict with the assembled DataFrame ``df`` plus the raw
     per-parameter arrays needed for plotting and validation.
@@ -82,6 +84,16 @@ def generate_dataset(n_total: int, binary_fraction: float, n_time: int, seed: in
 
     all_lightcurves = np.vstack([single_lightcurves, binary_lightcurves])
 
+    # --- Optional magnitude conversion ---
+    I_s_mag = None
+    if use_magnitudes:
+        I_s_mag = dist.sample_baseline_magnitude(n_total, rng)
+        # I(t) = I_s - 2.5 * log10(A(t)); guard against A<=0 edge cases
+        all_lightcurves = (
+            I_s_mag[:, np.newaxis]
+            - 2.5 * np.log10(np.maximum(all_lightcurves, 1e-10))
+        )
+
     # --- Assemble DataFrame ---
     time_cols = [f"t_{j:03d}" for j in range(n_time)]
 
@@ -118,6 +130,9 @@ def generate_dataset(n_total: int, binary_fraction: float, n_time: int, seed: in
         "alpha_ref_rad": alpha_ref_full,
     }
 
+    if use_magnitudes:
+        params_dict["I_s_mag"] = I_s_mag
+
     df_params = pd.DataFrame(params_dict)
     df_lightcurves = pd.DataFrame(all_lightcurves, columns=time_cols, dtype=np.float64)
     df = pd.concat([df_params, df_lightcurves], axis=1)
@@ -128,6 +143,7 @@ def generate_dataset(n_total: int, binary_fraction: float, n_time: int, seed: in
         "n_single": n_single,
         "n_binary": n_binary,
         "n_time": n_time,
+        "use_magnitudes": use_magnitudes,
         "M_star_solar": M_star_solar,
         "D_l_pc": D_l_pc,
         "D_ls_pc": D_ls_pc,
@@ -140,4 +156,5 @@ def generate_dataset(n_total: int, binary_fraction: float, n_time: int, seed: in
         "alpha_ref_binary": alpha_ref_binary,
         "single_lightcurves": single_lightcurves,
         "binary_lightcurves": binary_lightcurves,
+        "I_s_mag": I_s_mag,
     }
