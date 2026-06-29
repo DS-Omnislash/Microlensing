@@ -70,6 +70,21 @@
                     <p class="hint">A(t) stores the raw amplification ratio. I(t) converts to observable I-band magnitudes using the source baseline I_s sampled from the OGLE-IV distribution, via I(t) = I_s &minus; 2.5&thinsp;log&#x2081;&#x2080; A(t).</p>
                 </div>
 
+                <div class="field" id="imperfections-field" style="display:none">
+                    <label>Imperfections</label>
+                    <div class="radio-row">
+                        <label class="radio-item">
+                            <input type="radio" name="ogle_noise" value="none" id="imperfections-none" checked>
+                            <span>None &mdash; ideal light curves</span>
+                        </label>
+                        <label class="radio-item">
+                            <input type="radio" name="ogle_noise" value="ogle" id="imperfections-ogle">
+                            <span>OGLE noise &mdash; photometric scatter &amp; cadence gaps</span>
+                        </label>
+                    </div>
+                    <p class="hint">Adds realistic OGLE-IV imperfections: photometric noise &sigma;(I) and cadence gaps drawn from 3000 EWS event light curves. Unobserved time points become NaN. Only available in I(t) mode.</p>
+                </div>
+
                 <div class="field">
                     <div class="field-label-row">
                         <label>Output columns</label>
@@ -175,6 +190,11 @@
                 <img id="plot-distributions-binary" class="plot" alt="Binary parameter distributions">
             </div>
 
+            <div class="plot-block" id="ogle-distributions-block" hidden>
+                <h3>OGLE-IV imperfections applied</h3>
+                <img id="plot-distributions-ogle" class="plot" alt="OGLE noise model and cadence applied">
+            </div>
+
             <div class="plot-block">
                 <div class="plot-header-row">
                     <h3>Sample single-lens light curves</h3>
@@ -244,6 +264,10 @@
                 <div class="plot-block" id="binary-validation-block" hidden>
                     <h3>Binary-lens parameters</h3>
                     <img id="plot-validation-binary" class="plot" alt="Validation of binary parameters">
+                </div>
+                <div class="plot-block" id="validation-ogle-block" hidden>
+                    <h3>OGLE-IV imperfections</h3>
+                    <img id="plot-validation-ogle" class="plot" alt="Validation of OGLE-IV noise and cadence">
                 </div>
                 <div id="no-validation-data" class="hint" hidden>
                     No parameter columns found to validate. The dataset may contain only light curves or unrecognized columns.

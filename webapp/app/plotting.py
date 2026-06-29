@@ -6,6 +6,7 @@ strings so they can be embedded directly in the HTML response.
 
 import base64
 import io
+from pathlib import Path
 
 import matplotlib
 
@@ -15,6 +16,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy import stats
 from scipy.stats import gaussian_kde
+
+_NOISE_DIR = Path(__file__).resolve().parent.parent.parent / "noise_analysis"
 
 plt.rcParams.update({
     "figure.dpi": 100,
@@ -561,3 +564,189 @@ def plot_validation_available(data):
             binary_img = _fig_to_b64(fig3)
 
     return common_img, velocity_img, binary_img, stats_out
+
+
+def plot_ogle_validation(data):
+    """Validate OGLE-IV noise and cadence imperfections.
+
+    Panel A — noise level σ(I) distribution: compares the distribution of noise
+    levels applied at observed time points vs the OGLE-IV reference (weighted by
+    the empirical magnitude-bin counts from noise_model.npz).
+
+    Panel B — cadence coverage: histogram of the fraction of time points that
+    are non-NaN per event, showing how much of each light curve was "observed."
+
+    Returns (b64_str, stats_list) or (None, []) if model files are missing.
+    """
+    try:
+        nm = np.load(_NOISE_DIR / "noise_model.npz")
+        cm = np.load(_NOISE_DIR / "cadence_model.npz")
+    except FileNotFoundError:
+        return None, []
+
+    fit_params  = nm["fit_params"]
+    I_ref_val   = float(nm["I_ref"][0])
+    sig_floor   = float(fit_params[0])
+    sig_phot0   = float(fit_params[1])
+    bin_centers = nm["bin_centers"]
+    n_per_bin   = nm["n_per_bin"].astype(float)
+
+    def _sig(I):
+        return np.sqrt(sig_floor ** 2 + sig_phot0 ** 2 * 10.0 ** (0.4 * (I - I_ref_val)))
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    fig.suptitle("OGLE-IV Imperfections Validation", fontsize=15, fontweight="bold")
+
+    # ── Panel A: σ(I) distribution — generated vs OGLE-IV reference ──────────
+    time_cols = [c for c in data["df"].columns if c.startswith("t_") and c[2:].isdigit()]
+    lc_mat    = data["df"][time_cols].values
+    obs_mask  = ~np.isnan(lc_mat)
+
+    I_obs_all = lc_mat[obs_mask]
+    rng_p     = np.random.default_rng(0)
+    n_s       = min(len(I_obs_all), 100_000)
+    I_obs     = rng_p.choice(I_obs_all, size=n_s, replace=False)
+    sigma_gen = _sig(np.clip(I_obs, 12.0, 22.5))
+
+    # Reference: sample bin_centers weighted by OGLE observation count per bin
+    probs     = n_per_bin / n_per_bin.sum()
+    I_ref_s   = rng_p.choice(bin_centers, size=50_000, p=probs)
+    sigma_ref = _sig(np.clip(I_ref_s, 12.0, 22.5))
+
+    log_bins = np.logspace(np.log10(0.001), np.log10(1.0), 80)
+    ax1.hist(sigma_ref, bins=log_bins, density=True, alpha=0.40, color="orange",
+             label="OGLE-IV reference (magnitude-weighted)")
+    ax1.hist(sigma_gen, bins=log_bins, density=True, alpha=0.55, color="#2563eb",
+             label=f"Generated ({n_s:,} observed pts)")
+    ax1.set_xscale("log")
+    ax1.set_xlabel(r"$\sigma_I$ [mag]")
+    ax1.set_ylabel("Probability Density")
+    ax1.legend(fontsize=9)
+    ax1.grid(True, which="both", alpha=0.3)
+
+    n_ks_a    = min(n_s, 10_000)
+    ks_a, p_a = stats.ks_2samp(
+        rng_p.choice(sigma_gen, size=n_ks_a, replace=True),
+        rng_p.choice(sigma_ref, size=n_ks_a, replace=True),
+    )
+    status_a = "OK" if p_a > 0.01 else "CHECK"
+    ax1.set_title(
+        f"Noise Level Distribution\nKS stat={ks_a:.3f}, p={p_a:.3g}  [{status_a}]",
+        fontsize=11,
+    )
+
+    # ── Panel B: cadence coverage per event ───────────────────────────────────
+    obs_fracs = obs_mask.mean(axis=1)
+    mean_frac = float(np.mean(obs_fracs))
+    med_frac  = float(np.median(obs_fracs))
+
+    ax2.hist(obs_fracs, bins=50, density=True, color="#2563eb", alpha=0.70,
+             edgecolor="white", label=f"Per-event coverage (n={len(obs_fracs):,})")
+    ax2.axvline(mean_frac, color="red",    ls="--", lw=1.5,
+                label=f"Mean: {mean_frac:.1%}")
+    ax2.axvline(med_frac,  color="orange", ls=":",  lw=1.5,
+                label=f"Median: {med_frac:.1%}")
+    ax2.set_xlabel("Observation fraction (non-NaN / total time points)")
+    ax2.set_ylabel("Probability Density")
+    ax2.set_title("Cadence Coverage per Event", fontsize=11)
+    ax2.legend(fontsize=9)
+    ax2.set_xlim(0, 1)
+    ax2.grid(True, alpha=0.3)
+
+    fig.tight_layout()
+    b64 = _fig_to_b64(fig)
+
+    stats_entries = [
+        {
+            "parameter": "Noise level sigma_I distribution",
+            "reference": (
+                f"OGLE-IV empirical noise (3 000 EWS events): "
+                f"sigma_floor={sig_floor:.5f} mag, sigma_phot0={sig_phot0:.5f} mag at I=18"
+            ),
+            "observed": f"KS stat={ks_a:.4f} (p={p_a:.3g}) vs OGLE reference, {n_s:,} observed pts",
+            "expected": "Noise level distribution matches OGLE-IV reference (KS p > 0.01)",
+            "status": status_a,
+        },
+        {
+            "parameter": "Cadence coverage fraction",
+            "reference": "OGLE-IV within-season cadence: 76% intra-night (<0.5 d), 24% night-to-night",
+            "observed": f"Mean observation fraction: {mean_frac:.1%},  median: {med_frac:.1%}",
+            "expected": "Fraction < 100% (cadence gaps present in each light curve)",
+            "status": "OK" if mean_frac < 0.99 else "CHECK",
+        },
+    ]
+
+    return b64, stats_entries
+
+
+def plot_distributions_ogle(data):
+    """Informational two-panel figure shown after generation when ogle_noise=True.
+
+    Panel A — the σ(I) noise model that was applied, overlaid on OGLE-IV reference.
+    Panel B — the cadence Δt distribution that was bootstrap-resampled per event.
+    """
+    try:
+        nm = np.load(_NOISE_DIR / "noise_model.npz")
+        cm = np.load(_NOISE_DIR / "cadence_model.npz")
+    except FileNotFoundError:
+        return None
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    fig.suptitle(
+        "OGLE-IV Imperfections Applied to Dataset",
+        fontsize=15, fontweight="bold",
+    )
+
+    # ── Panel A: noise model σ(I) ─────────────────────────────────────────────
+    I_curve     = nm["I_curve"]
+    sigma_curve = nm["sigma_curve"]
+    bin_centers = nm["bin_centers"]
+    med_sigma   = nm["med_sigma"]
+    pct16       = nm["pct16_sigma"]
+    pct84       = nm["pct84_sigma"]
+    fp          = nm["fit_params"]
+
+    ax1.fill_between(bin_centers, pct16, pct84, alpha=0.25, color="orange",
+                     label="16th–84th pct (OGLE-IV reference)")
+    ax1.plot(bin_centers, med_sigma, "o", ms=4, color="orange", zorder=3,
+             label="Median per bin (OGLE-IV reference)")
+    ax1.plot(I_curve, sigma_curve, "r-", lw=2.5,
+             label=fr"Applied: $\sqrt{{{fp[0]:.4f}^2+{fp[1]:.4f}^2\cdot10^{{0.4(I-18)}}}}$")
+    ax1.set_yscale("log")
+    ax1.set_xlim(12, 22.5)
+    ax1.set_ylim(0.001, 1.0)
+    ax1.set_xlabel("I-band magnitude [mag]")
+    ax1.set_ylabel(r"$\sigma_I$ [mag]")
+    ax1.set_title("Photometric Noise Model Applied\n(fitted to 3 000 OGLE-IV EWS events)")
+    ax1.legend(fontsize=9)
+    ax1.grid(True, which="both", alpha=0.3)
+
+    # ── Panel B: cadence Δt distribution ─────────────────────────────────────
+    dt_ref   = cm["dt_inseason"]
+    st       = cm["stats"]
+    med_dt   = float(st[0])
+    vis_frac = float(st[6])
+
+    dt_plot  = dt_ref[(dt_ref > 0.005) & (dt_ref < 100)]
+    log_bins = np.logspace(np.log10(0.005), np.log10(100), 80)
+    ax2.hist(dt_plot, bins=log_bins, density=True, color="#2563eb", alpha=0.60,
+             label=f"OGLE-IV within-season Δt (n={len(dt_plot):,})")
+    ax2.axvline(med_dt, color="red", ls="--", lw=1.5,
+                label=f"Median: {med_dt * 24 * 60:.0f} min")
+    ax2.set_xscale("log")
+    ticks = [0.01, 0.1, 0.5, 1, 7, 30, 100]
+    tlabs = ["15 min", "2.4 h", "0.5 d", "1 d", "1 wk", "1 mo", "100 d"]
+    ax2.set_xticks(ticks)
+    ax2.set_xticklabels(tlabs, fontsize=8)
+    ax2.set_xlim(0.005, 100)
+    ax2.set_xlabel(r"$\Delta t$ between consecutive observations [days]")
+    ax2.set_ylabel("Probability Density")
+    ax2.set_title(
+        f"Cadence Distribution Applied\n"
+        f"(Galactic Bulge visible {vis_frac:.0%}/yr · bootstrap-resampled per event)"
+    )
+    ax2.legend(fontsize=9)
+    ax2.grid(True, which="both", alpha=0.25)
+
+    fig.tight_layout()
+    return _fig_to_b64(fig)

@@ -9,11 +9,12 @@ from .lightcurves import (
     compute_einstein_quantities,
     compute_single_lightcurves,
 )
+from .ogle_noise import apply_ogle_imperfections
 
 SEED = 42
 
 
-def generate_dataset(n_total: int, binary_fraction: float, n_time: int, seed: int = SEED, use_magnitudes: bool = False):
+def generate_dataset(n_total: int, binary_fraction: float, n_time: int, seed: int = SEED, use_magnitudes: bool = False, ogle_noise: bool = False):
     """Generate a synthetic microlensing dataset.
 
     Parameters
@@ -94,6 +95,10 @@ def generate_dataset(n_total: int, binary_fraction: float, n_time: int, seed: in
             - 2.5 * np.log10(np.maximum(all_lightcurves, 1e-10))
         )
 
+    # --- Optional OGLE-IV imperfections (noise + cadence gaps) ---
+    if use_magnitudes and ogle_noise:
+        all_lightcurves = apply_ogle_imperfections(all_lightcurves, t_E_days, rng)
+
     # --- Assemble DataFrame ---
     time_cols = [f"t_{j:03d}" for j in range(n_time)]
 
@@ -157,4 +162,5 @@ def generate_dataset(n_total: int, binary_fraction: float, n_time: int, seed: in
         "single_lightcurves": single_lightcurves,
         "binary_lightcurves": binary_lightcurves,
         "I_s_mag": I_s_mag,
+        "ogle_noise": ogle_noise,
     }

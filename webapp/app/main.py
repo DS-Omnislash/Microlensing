@@ -73,8 +73,9 @@ def _select_columns(df, data: dict):
 def _build_filename(data: dict, ext: str) -> str:
     pct_str = f"{data['binary_percent']:g}%"
     fmt_part = "_I(t)" if data.get("use_magnitudes") else "_A(t)"
+    noise_part = "_OGLE" if data.get("ogle_noise") else ""
     preset_part = f"_{data['preset']}" if data.get("preset") else ""
-    return f"Microlensing_Dataset_{data['n_total']}_{pct_str}_{data['n_time']}pts{fmt_part}{preset_part}.{ext}"
+    return f"Microlensing_Dataset_{data['n_total']}_{pct_str}_{data['n_time']}pts{fmt_part}{noise_part}{preset_part}.{ext}"
 
 
 def _data_from_df(df: pd.DataFrame) -> dict:
@@ -136,6 +137,7 @@ class GenerateRequest(BaseModel):
     selected_params: list[str] = Field(default_factory=list)
     preset: str = Field(default="")
     use_magnitudes: bool = Field(default=False)
+    ogle_noise: bool = Field(default=False)
 
 
 @app.get("/")
@@ -167,6 +169,7 @@ def api_generate(req: GenerateRequest):
         binary_fraction=req.binary_percent / 100.0,
         n_time=req.n_time,
         use_magnitudes=req.use_magnitudes,
+        ogle_noise=req.ogle_noise,
     )
     data["selected_params"] = req.selected_params
     data["binary_percent"] = req.binary_percent
@@ -182,6 +185,7 @@ def api_generate(req: GenerateRequest):
         "plots": {
             "distributions_common": plotting.plot_distributions_common(data),
             "distributions_binary": plotting.plot_distributions_binary(data),
+            "distributions_ogle": plotting.plot_distributions_ogle(data) if data.get("ogle_noise") else None,
             "sample_single_lightcurves": plotting.plot_sample_single_lightcurves(data),
             "sample_binary_lightcurves": plotting.plot_sample_binary_lightcurves(data),
         },
@@ -212,14 +216,21 @@ def api_validate(dataset_id: str):
 
     common_img, velocity_img, binary_img, stats_list = plotting.plot_validation_available(data)
 
+    ogle_img, ogle_stats = None, []
+    if data.get("ogle_noise"):
+        result = plotting.plot_ogle_validation(data)
+        if result is not None:
+            ogle_img, ogle_stats = result
+
     return {
         "dataset_id": dataset_id,
         "plots": {
             "validation_common": common_img,
             "validation_velocity": velocity_img,
             "validation_binary": binary_img,
+            "validation_ogle": ogle_img,
         },
-        "stats": stats_list,
+        "stats": stats_list + ogle_stats,
     }
 
 

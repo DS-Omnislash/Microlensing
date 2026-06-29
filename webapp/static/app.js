@@ -26,6 +26,7 @@ const colCheckboxes = document.querySelectorAll(".col-check");
 const isMagCheckItem = document.getElementById("Is-mag-check-item");
 const isMagCheck = document.getElementById("Is-mag-check");
 const formatRadios = document.querySelectorAll('input[name="use_magnitudes"]');
+const imperfectionsField = document.getElementById("imperfections-field");
 const colsAllBtn = document.getElementById("cols-all-btn");
 const colsNoneBtn = document.getElementById("cols-none-btn");
 
@@ -74,6 +75,12 @@ function updateFormatToggle() {
         isMagCheck.checked = false;
         isMagCheckItem.style.opacity = "0.4";
         isMagCheckItem.style.pointerEvents = "none";
+    }
+    if (useMag) {
+        imperfectionsField.style.display = "";
+    } else {
+        imperfectionsField.style.display = "none";
+        document.getElementById("imperfections-none").checked = true;
     }
 }
 formatRadios.forEach(r => r.addEventListener("change", updateFormatToggle));
@@ -133,6 +140,7 @@ async function runValidation(datasetId, btn, statusEl) {
         setImage("plot-validation-common", data.plots.validation_common);
         setImage("plot-validation-velocity", data.plots.validation_velocity);
         setImage("plot-validation-binary", data.plots.validation_binary);
+        setImage("plot-validation-ogle", data.plots.validation_ogle);
 
         const noDataMsg = document.getElementById("no-validation-data");
         const tableHeading = document.getElementById("validation-table-heading");
@@ -279,6 +287,7 @@ form.addEventListener("submit", async (e) => {
         .map(cb => cb.value);
 
     const useMagnitudes = document.querySelector('input[name="use_magnitudes"]:checked').value === "1";
+    const ogleNoise = document.querySelector('input[name="ogle_noise"]:checked')?.value === "ogle";
     const payload = {
         n_total: parseInt(nTotalInput.value, 10),
         binary_percent: parseFloat(binaryPercentInput.value),
@@ -286,6 +295,7 @@ form.addEventListener("submit", async (e) => {
         selected_params: selectedParams,
         preset: currentPreset || "",
         use_magnitudes: useMagnitudes,
+        ogle_noise: ogleNoise,
     };
 
     generateBtn.disabled = true;
@@ -330,6 +340,14 @@ form.addEventListener("submit", async (e) => {
             binaryBlock.hidden = false;
         } else {
             binaryBlock.hidden = true;
+        }
+
+        const ogleDistBlock = document.getElementById("ogle-distributions-block");
+        if (data.plots.distributions_ogle) {
+            setImage("plot-distributions-ogle", data.plots.distributions_ogle);
+            ogleDistBlock.hidden = false;
+        } else {
+            ogleDistBlock.hidden = true;
         }
 
         const binarySamplesBlock = document.getElementById("binary-samples-block");
