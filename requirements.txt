@@ -7,3 +7,8 @@ matplotlib>=3.8
 jinja2>=3.1
 
 python-multipart>=0.0.9
+
+# Machine-learning models (Model 1 classifier — training and in-app inference).
+# On Windows/macOS `pip install torch` pulls the CPU build by default.
+torch>=2.2
+scikit-learn>=1.4

@@ -783,3 +783,55 @@ input[type="file"] {
     flex-shrink: 0;
     margin: 0;
 }
+
+/* ─── Model 1 classifier section ─────────────────────────────── */
+.model-tag {
+    font-family: var(--font-sans);
+    font-size: 0.625rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-2);
+    background: var(--canvas);
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    padding: 0.125rem 0.5rem;
+    vertical-align: middle;
+}
+
+.model-about {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.25rem;
+    margin: 1rem 0 1.25rem;
+}
+
+.model-about-col .validation-mode-title {
+    margin-bottom: 0.375rem;
+}
+
+.model-warning {
+    background: var(--check-bg);
+    border: 1px solid var(--check);
+    border-radius: 4px;
+    padding: 0.875rem 1rem;
+    font-size: 0.8125rem;
+    color: var(--text);
+    line-height: 1.55;
+    margin-bottom: 1.25rem;
+}
+
+.model-warning code {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+}
+
+.model-result-summary {
+    margin: 1rem 0;
+    font-size: 0.9375rem;
+}
+
+.button--disabled {
+    opacity: 0.4;
+    pointer-events: none;
+}

@@ -21,9 +21,12 @@ Microlensing-1/
 │   │   ├── ogle_noise.py     OGLE-IV noise model + cadence gap application
 │   │   ├── plotting.py       Matplotlib plots (distributions, samples, validation)
 │   │   ├── distribution_plots.py  Pre-computed KDE curves for the reference UI
-│   │   └── content.py        Static descriptive content for the UI
+│   │   ├── content.py        Static descriptive content for the UI
+│   │   └── model1.py         Model 1 (Simple) inference wrapper (PyTorch)
 │   ├── static/               CSS and JavaScript
 │   └── templates/            Jinja2 HTML templates
+├── models/                   Trained ML models (Model 1/2/3, each Simple + Real)
+│   └── model_1/Simple/       Single-vs-binary CNN: training script + model_1_simple.pt
 ├── noise_analysis/           OGLE-IV empirical noise and cadence characterisation
 │   ├── ogle_event_ids.csv    17 172 OGLE-IV EWS event IDs (years 2011–2025)
 │   ├── fetch_phot.py         Downloads 3 000 random phot.dat files in parallel
@@ -63,13 +66,45 @@ Microlensing-1/
   validation pipeline.
 - **Download** — export as CSV or Pickle (`.pkl`). Filenames include `_OGLE` when
   imperfections were applied.
+- **Model 1 — single vs. binary classifier** *(Simple)* — a trained 1D CNN
+  (PyTorch) that predicts, per event, whether a light curve is single-lens or
+  binary-lens. Classify the dataset you just generated with one click, or upload a
+  *model dataset* (light curves only, exactly 400 points, no gaps). Returns a
+  per-event `predictions.csv` and a download containing only the detected binary
+  events with their full light curves.
 
 ## Running locally
 
+The simplest way to start the app on Windows is the launcher script:
+
+```bat
+REM From the project root (Microlensing-1/)
+run.bat
+```
+
+`run.bat` is **self-bootstrapping**. On each launch it will, only when needed:
+
+1. create the virtual environment (`venv\`) if it is missing,
+2. install / update dependencies from `requirements.txt` (the first run downloads
+   PyTorch and can take a few minutes; later runs skip this and start instantly),
+3. start the web app at http://127.0.0.1:8000.
+
+Dependency installation is keyed to a hash of `requirements.txt`, so it only re-runs
+when that file changes. `requirements.txt` includes `torch` (CPU build on
+Windows/macOS) and `scikit-learn`, needed by the Model 1 classifier for in-app
+inference and training.
+
+Then open http://127.0.0.1:8000 in a browser.
+
+### Manual / cross-platform
+
+To run without the launcher (e.g. on macOS/Linux), set up the environment once and
+start uvicorn with the venv Python:
+
 ```bash
-# From the project root (Microlensing-1/)
-pip install -r requirements.txt
-uvicorn app.main:app --reload --app-dir webapp
+python -m venv venv
+venv/bin/python -m pip install -r requirements.txt        # Windows: venv\Scripts\python
+venv/bin/python -m uvicorn app.main:app --reload --app-dir webapp
 ```
 
 Then open http://127.0.0.1:8000 in a browser.

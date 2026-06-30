@@ -304,6 +304,8 @@ form.addEventListener("submit", async (e) => {
     resultsSection.hidden = true;
     validationResults.hidden = true;
     validateBtn.disabled = true;
+    document.getElementById("gen-model1-results").hidden = true;
+    document.getElementById("gen-classify-status").textContent = "";
 
     try {
         const resp = await fetch("/api/generate", {
@@ -409,6 +411,145 @@ refreshBinaryBtn.addEventListener("click", async () => {
         refreshBinaryBtn.disabled = false;
     }
 });
+// ── Model 1: single vs. binary classifier ────────────────────────────────
+const model1File = document.getElementById("model1-file");
+const model1Filename = document.getElementById("model1-filename");
+const model1ClassifyBtn = document.getElementById("model1-classify-btn");
+const model1Status = document.getElementById("model1-status");
+const model1Results = document.getElementById("model1-results");
+const model1Summary = document.getElementById("model1-summary");
+const model1DownloadPredictions = document.getElementById("model1-download-predictions");
+const model1DownloadBinaries = document.getElementById("model1-download-binaries");
+
+model1File.addEventListener("change", () => {
+    const file = model1File.files[0];
+    if (file) {
+        model1Filename.textContent = file.name;
+        model1ClassifyBtn.disabled = false;
+    } else {
+        model1Filename.textContent = "No file selected";
+        model1ClassifyBtn.disabled = true;
+    }
+    model1Results.hidden = true;
+    model1Status.classList.remove("error");
+    model1Status.textContent = "";
+});
+
+model1ClassifyBtn.addEventListener("click", async () => {
+    const file = model1File.files[0];
+    if (!file) return;
+
+    model1ClassifyBtn.disabled = true;
+    model1Status.classList.remove("error");
+    model1Status.textContent = "Checking dataset and running the model...";
+    model1Results.hidden = true;
+
+    try {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const resp = await fetch("/api/model1/predict", {
+            method: "POST",
+            body: formData,
+        });
+
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `Request failed with status ${resp.status}`);
+        }
+
+        const data = await resp.json();
+        const pct = data.n_total > 0
+            ? ((100 * data.n_binary) / data.n_total).toFixed(1)
+            : "0.0";
+
+        model1Summary.innerHTML = `
+            <p>
+                Classified <strong>${data.n_total.toLocaleString()}</strong> events:
+                <strong>${data.n_single.toLocaleString()}</strong> single-lens and
+                <strong>${data.n_binary.toLocaleString()}</strong> binary-lens
+                (${pct}% binary).
+            </p>
+        `;
+
+        model1DownloadPredictions.href = `/api/model1/download-predictions/${data.dataset_id}`;
+        model1DownloadBinaries.href = `/api/model1/download-binaries/${data.dataset_id}`;
+
+        // No detected binaries -> nothing to download in that file.
+        if (data.n_binary === 0) {
+            model1DownloadBinaries.classList.add("button--disabled");
+        } else {
+            model1DownloadBinaries.classList.remove("button--disabled");
+        }
+
+        model1Results.hidden = false;
+        model1Status.textContent = "Done.";
+    } catch (err) {
+        model1Status.classList.add("error");
+        model1Status.textContent = `Error: ${err.message}`;
+    } finally {
+        model1ClassifyBtn.disabled = false;
+    }
+});
+
+// ── Classify the recently generated dataset with Model 1 ──────────────────
+const genClassifyBtn = document.getElementById("gen-classify-btn");
+const genClassifyStatus = document.getElementById("gen-classify-status");
+const genModel1Results = document.getElementById("gen-model1-results");
+const genModel1Summary = document.getElementById("gen-model1-summary");
+const genModel1DownloadPredictions = document.getElementById("gen-model1-download-predictions");
+const genModel1DownloadBinaries = document.getElementById("gen-model1-download-binaries");
+
+genClassifyBtn.addEventListener("click", async () => {
+    if (!currentDatasetId) return;
+
+    genClassifyBtn.disabled = true;
+    genClassifyStatus.classList.remove("error");
+    genClassifyStatus.textContent = "Running the recently generated dataset through Model 1...";
+    genModel1Results.hidden = true;
+
+    try {
+        const resp = await fetch(`/api/model1/predict-generated/${currentDatasetId}`, {
+            method: "POST",
+        });
+
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `Request failed with status ${resp.status}`);
+        }
+
+        const data = await resp.json();
+        const pct = data.n_total > 0
+            ? ((100 * data.n_binary) / data.n_total).toFixed(1)
+            : "0.0";
+
+        genModel1Summary.innerHTML = `
+            <p>
+                Classified <strong>${data.n_total.toLocaleString()}</strong> events:
+                <strong>${data.n_single.toLocaleString()}</strong> single-lens and
+                <strong>${data.n_binary.toLocaleString()}</strong> binary-lens
+                (${pct}% binary).
+            </p>
+        `;
+
+        genModel1DownloadPredictions.href = `/api/model1/download-predictions/${currentDatasetId}`;
+        genModel1DownloadBinaries.href = `/api/model1/download-binaries/${currentDatasetId}`;
+        if (data.n_binary === 0) {
+            genModel1DownloadBinaries.classList.add("button--disabled");
+        } else {
+            genModel1DownloadBinaries.classList.remove("button--disabled");
+        }
+
+        genModel1Results.hidden = false;
+        genClassifyStatus.textContent = "Done.";
+    } catch (err) {
+        genClassifyStatus.classList.add("error");
+        genClassifyStatus.textContent = `Error: ${err.message}`;
+    } finally {
+        genClassifyBtn.disabled = false;
+    }
+});
+
 // ── Reference distribution plots (Plotly.js) ─────────────────────────────
 (function () {
     const dataEl = document.getElementById("dist-plots-data");

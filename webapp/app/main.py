@@ -268,6 +268,146 @@ async def api_upload_validate(file: UploadFile = File(...)):
     }
 
 
+@app.post("/api/model1/predict")
+async def api_model1_predict(file: UploadFile = File(...)):
+    """Run Model 1 (Simple) on an uploaded model dataset (light curves only)."""
+    content_bytes = await file.read()
+    fname = (file.filename or "").lower()
+    try:
+        if fname.endswith(".pkl"):
+            df = pd.read_pickle(io.BytesIO(content_bytes))
+        else:
+            df = pd.read_csv(io.StringIO(content_bytes.decode("utf-8", errors="replace")))
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Could not parse file: {exc}")
+
+    if not isinstance(df, pd.DataFrame):
+        raise HTTPException(status_code=422, detail="File does not contain a tabular dataset.")
+
+    # Import lazily so the webapp starts even without torch installed.
+    try:
+        from . import model1
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="The model runtime (PyTorch) is not installed on the server.",
+        )
+
+    try:
+        result = model1.classify_dataframe(df)
+    except model1.ModelDatasetError as exc:
+        # Dataset rejected before inference -- 422 so the UI can show why.
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    dataset_id = _store_dataset(
+        {
+            "model1_df": df,
+            "model1_pred": result["pred"],
+            "model1_prob_binary": result["prob_binary"],
+            "source_filename": file.filename or "dataset",
+        }
+    )
+
+    return {
+        "dataset_id": dataset_id,
+        "n_total": result["n_total"],
+        "n_single": result["n_single"],
+        "n_binary": result["n_binary"],
+    }
+
+
+@app.post("/api/model1/predict-generated/{dataset_id}")
+def api_model1_predict_generated(dataset_id: str):
+    """Run Model 1 (Simple) on a dataset generated in-app this session."""
+    data = _get_dataset(dataset_id)
+
+    if "df" not in data:
+        raise HTTPException(status_code=404, detail="No generated dataset for this id.")
+
+    # The Simple model was trained on I(t) magnitude curves; A(t) is a
+    # different (sign-flipped) domain and would not classify reliably.
+    if not data.get("use_magnitudes"):
+        raise HTTPException(
+            status_code=422,
+            detail="The model expects I(t) magnitude light curves. This dataset "
+            "is in A(t) (amplification) mode. Regenerate it in I(t) mode to classify it.",
+        )
+
+    try:
+        from . import model1
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="The model runtime (PyTorch) is not installed on the server.",
+        )
+
+    try:
+        result = model1.classify_generated(data["df"])
+    except model1.ModelDatasetError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    # Attach predictions to the existing cache entry so the download endpoints
+    # (which look up model1_pred / model1_df) work on the same id.
+    data["model1_pred"] = result["pred"]
+    data["model1_prob_binary"] = result["prob_binary"]
+    data["model1_df"] = data["df"]
+
+    return {
+        "dataset_id": dataset_id,
+        "n_total": result["n_total"],
+        "n_single": result["n_single"],
+        "n_binary": result["n_binary"],
+    }
+
+
+@app.get("/api/model1/download-predictions/{dataset_id}")
+def api_model1_download_predictions(dataset_id: str):
+    """Stream the per-event predictions.csv for a Model 1 run."""
+    data = _get_dataset(dataset_id)
+    if "model1_pred" not in data:
+        raise HTTPException(status_code=404, detail="No Model 1 predictions for this id.")
+
+    pred = data["model1_pred"]
+    prob = data["model1_prob_binary"]
+    out = pd.DataFrame(
+        {
+            "row_index": range(len(pred)),
+            "pred_label": ["binary" if p == 1 else "single" for p in pred],
+            "prob_binary": prob,
+        }
+    )
+
+    buf = io.StringIO()
+    out.to_csv(buf, index=False, float_format="%.6g")
+    buf.seek(0)
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=predictions.csv"},
+    )
+
+
+@app.get("/api/model1/download-binaries/{dataset_id}")
+def api_model1_download_binaries(dataset_id: str):
+    """Stream a CSV of only the events predicted to be binary-lens (full curves)."""
+    data = _get_dataset(dataset_id)
+    if "model1_pred" not in data:
+        raise HTTPException(status_code=404, detail="No Model 1 predictions for this id.")
+
+    df = data["model1_df"]
+    pred = data["model1_pred"]
+    binary_df = df.loc[pred == 1]
+
+    buf = io.StringIO()
+    binary_df.to_csv(buf, index=False, float_format="%.10g")
+    buf.seek(0)
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=detected_binary_events.csv"},
+    )
+
+
 @app.get("/api/download/{dataset_id}")
 def api_download(dataset_id: str):
     data = _get_dataset(dataset_id)

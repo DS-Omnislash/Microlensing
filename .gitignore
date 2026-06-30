@@ -219,3 +219,8 @@ __marimo__/
 
 # Local working notes
 NOISE_MODEL_NOTES.md
+
+# Large generated ML datasets — regenerate from the webapp; do not commit
+# (GitHub rejects files over 100 MB). Training scripts and trained models
+# (*.pt) are kept; only the bulky source CSVs are ignored.
+models/**/*.csv

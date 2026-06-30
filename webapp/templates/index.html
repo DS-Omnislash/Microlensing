@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=6">
+    <link rel="stylesheet" href="/static/style.css?v=7">
 </head>
 <body>
     <header>
@@ -214,7 +214,17 @@
             <div class="actions">
                 <a id="download-link" class="button" href="#">Download CSV</a>
                 <a id="download-pkl-link" class="button" href="#">Download PKL</a>
+                <button id="gen-classify-btn" type="button">Classify with Model 1</button>
             </div>
+
+            <div id="gen-model1-results" hidden>
+                <div class="model-result-summary" id="gen-model1-summary"></div>
+                <div class="actions">
+                    <a id="gen-model1-download-predictions" class="button" href="#">Download predictions.csv</a>
+                    <a id="gen-model1-download-binaries" class="button" href="#">Download detected binaries</a>
+                </div>
+            </div>
+            <div id="gen-classify-status" class="status"></div>
         </section>
 
         <section class="card" id="validation-section">
@@ -308,6 +318,58 @@
                     <p class="param-ref">{{ p.reference }}</p>
                 </div>
                 {% endfor %}
+            </div>
+        </section>
+
+        <section class="card" id="model1-section">
+            <h2>Model 1 — Single vs. Binary classifier <span class="model-tag">Simple</span></h2>
+            <p class="section-desc">Upload a dataset of light curves and let the trained classifier predict, for each event, whether it is a <strong>single-lens</strong> or <strong>binary-lens</strong> microlensing event.</p>
+
+            <div class="model-about">
+                <div class="model-about-col">
+                    <h3 class="validation-mode-title">What this model is</h3>
+                    <p class="hint">
+                        A 1D convolutional neural network (PyTorch) that reads the shape of a
+                        light curve and classifies it as single-lens or binary-lens. It learns
+                        to tell the smooth, symmetric Paczyński peak of a single lens apart from
+                        the sharp caustic-crossing spikes of a binary lens.
+                    </p>
+                </div>
+                <div class="model-about-col">
+                    <h3 class="validation-mode-title">How it was created</h3>
+                    <p class="hint">
+                        Trained on 100,000 synthetic I(t) light curves generated above
+                        (90% single / 10% binary, 400 points each), with no noise or cadence
+                        gaps — the <em>Simple</em> framework. Each curve is normalized
+                        individually before training, and the 90/10 class imbalance is handled
+                        with a weighted loss. On a held-out test set it reaches F1 ≈ 0.999.
+                    </p>
+                </div>
+            </div>
+
+            <div class="model-warning">
+                <strong>Before you upload:</strong> this model only accepts a <em>model dataset</em> —
+                a file containing <strong>only the light-curve columns</strong>
+                (<code>t_000 … t_399</code>) and nothing else, with <strong>exactly 400 points</strong>
+                per curve and no missing values. Files that include extra parameter columns, a
+                different number of points, or cadence gaps (NaN) will be rejected without being
+                run through the model.
+            </div>
+
+            <div class="upload-row">
+                <label class="btn-upload" for="model1-file">Choose file</label>
+                <input type="file" id="model1-file" accept=".csv,.pkl">
+                <span id="model1-filename" class="upload-filename">No file selected</span>
+                <button id="model1-classify-btn" type="button" disabled>Classify events</button>
+            </div>
+            <div id="model1-status" class="status"></div>
+
+            <div id="model1-results" hidden>
+                <div class="model-result-summary" id="model1-summary"></div>
+                <div class="actions">
+                    <a id="model1-download-predictions" class="button" href="#">Download predictions.csv</a>
+                    <a id="model1-download-binaries" class="button" href="#">Download detected binaries</a>
+                </div>
             </div>
         </section>
     </main>
