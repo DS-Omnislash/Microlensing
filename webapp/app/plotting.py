@@ -390,28 +390,67 @@ def plot_validation_available(data):
             ax = ax_list[idx]; idx += 1
             ax.hist(I_s, bins=50, density=True, alpha=0.6, color="#e67e22",
                     edgecolor="white", label="Data")
-            x_is = np.linspace(14, 22, 300)
-            z_ref = (x_is - 14.0) / 8.0
-            beta_pdf = stats.beta.pdf(z_ref, 15.0, 6.0) / 8.0
-            ax.plot(x_is, beta_pdf, "darkorange", lw=2,
-                    label="Beta(15,6) scaled [TdR Image 10]")
-            ax.axvline(np.median(I_s), color="navy", ls="--", lw=1.5,
-                       label=f"Median: {np.median(I_s):.2f} mag")
-            ax.set_xlabel("Source Baseline Magnitude I_s (mag)")
-            ax.set_ylabel("Probability Density")
-            ax.set_title("Source Baseline Magnitude I_s [Image 10, p.28]")
-            ax.legend()
-            z_data = np.clip((I_s - 14.0) / 8.0, 0.0, 1.0)
-            ks_stat_is, ks_p_is = stats.kstest(z_data, "beta", args=(15.0, 6.0))
-            median_is = float(np.median(I_s))
-            in_range_is = 19.0 <= median_is <= 20.5
-            stats_out.append({
-                "parameter": "Source Baseline Magnitude I_s (mag)",
-                "reference": "TdR Image 10 (p.28): OGLE-IV, Beta(15,6) scaled to [14,22], mode ~19.85 mag",
-                "observed": f"KS statistic = {ks_stat_is:.4f} (p = {ks_p_is:.3g}), median = {median_is:.2f} mag",
-                "expected": "Distribution peaking near 19.85 mag, range [14, 22] mag",
-                "status": "OK" if in_range_is else "CHECK",
-            })
+
+            # In OGLE mode I_s is not sampled from the theoretical TdR Beta: it is
+            # bootstrapped from the real OGLE-IV event catalogue (paired with its
+            # blend fraction f_s), so it must be validated against that catalogue.
+            Is_ref = None
+            if data.get("ogle_noise"):
+                try:
+                    Is_ref = np.load(_NOISE_DIR / "blend_model.npz")["Is"]
+                except (FileNotFoundError, KeyError):
+                    Is_ref = None
+
+            if Is_ref is not None:
+                ax.hist(Is_ref, bins=50, density=True, histtype="step", lw=2,
+                        color="darkorange", label="OGLE-IV catalogue (Is_med)")
+                ax.axvline(np.median(I_s), color="navy", ls="--", lw=1.5,
+                           label=f"Median: {np.median(I_s):.2f} mag")
+                ax.set_xlabel("Source Baseline Magnitude I_s (mag)")
+                ax.set_ylabel("Probability Density")
+                ax.set_title("Source Baseline Magnitude I_s [OGLE-IV catalogue]")
+                ax.legend()
+
+                rng_is = np.random.default_rng(0)
+                n_is = min(len(I_s), 10_000)
+                ks_stat_is, ks_p_is = stats.ks_2samp(
+                    rng_is.choice(I_s, size=n_is, replace=True), Is_ref
+                )
+                median_is = float(np.median(I_s))
+                ref_med = float(np.median(Is_ref))
+                # Judge on the KS statistic (effect size): the generated values are
+                # bootstrapped from this very catalogue, so they should match closely.
+                in_range_is = ks_stat_is < 0.05
+                stats_out.append({
+                    "parameter": "Source Baseline Magnitude I_s (mag)",
+                    "reference": f"OGLE-IV event catalogue (blend_model.npz, Is_med), median {ref_med:.2f} mag",
+                    "observed": f"KS statistic = {ks_stat_is:.4f} (p = {ks_p_is:.3g}), median = {median_is:.2f} mag",
+                    "expected": f"Bootstrapped from the catalogue (KS stat < 0.05, median ~{ref_med:.2f} mag)",
+                    "status": "OK" if in_range_is else "CHECK",
+                })
+            else:
+                x_is = np.linspace(14, 22, 300)
+                z_ref = (x_is - 14.0) / 8.0
+                beta_pdf = stats.beta.pdf(z_ref, 15.0, 6.0) / 8.0
+                ax.plot(x_is, beta_pdf, "darkorange", lw=2,
+                        label="Beta(15,6) scaled [TdR Image 10]")
+                ax.axvline(np.median(I_s), color="navy", ls="--", lw=1.5,
+                           label=f"Median: {np.median(I_s):.2f} mag")
+                ax.set_xlabel("Source Baseline Magnitude I_s (mag)")
+                ax.set_ylabel("Probability Density")
+                ax.set_title("Source Baseline Magnitude I_s [Image 10, p.28]")
+                ax.legend()
+                z_data = np.clip((I_s - 14.0) / 8.0, 0.0, 1.0)
+                ks_stat_is, ks_p_is = stats.kstest(z_data, "beta", args=(15.0, 6.0))
+                median_is = float(np.median(I_s))
+                in_range_is = 19.0 <= median_is <= 20.5
+                stats_out.append({
+                    "parameter": "Source Baseline Magnitude I_s (mag)",
+                    "reference": "TdR Image 10 (p.28): OGLE-IV, Beta(15,6) scaled to [14,22], mode ~19.85 mag",
+                    "observed": f"KS statistic = {ks_stat_is:.4f} (p = {ks_p_is:.3g}), median = {median_is:.2f} mag",
+                    "expected": "Distribution peaking near 19.85 mag, range [14, 22] mag",
+                    "status": "OK" if in_range_is else "CHECK",
+                })
 
         fig.tight_layout()
         common_img = _fig_to_b64(fig)
@@ -436,12 +475,18 @@ def plot_validation_available(data):
         velocity_img = _fig_to_b64(fig2)
 
         ks_stat_v, ks_p_v = stats.kstest(v_perp, "maxwell", args=(0, mb_scale))
+        # Judge on the KS statistic (effect size), not the p-value -- consistent with
+        # every other check here. For a correctly sampled Maxwell the p-value is
+        # uniform on [0,1], so a p<0.01 rule raises a false alarm ~1% of the time no
+        # matter how good the generator is; and as n grows it collapses to 0 for any
+        # negligible deviation. The statistic measures what actually matters: how far
+        # apart the two cumulative distributions are.
         stats_out.append({
             "parameter": "Lens Velocity v_perp (km/s)",
             "reference": "TdR p.24 (Rahvar 2015): Maxwell-Boltzmann distribution, mode = 200 km/s",
             "observed": f"KS statistic = {ks_stat_v:.4f} (p = {ks_p_v:.3g}), median = {np.median(v_perp):.1f} km/s",
-            "expected": "Maxwell-Boltzmann shape with mode near 200 km/s",
-            "status": "OK" if ks_p_v > 0.01 else "CHECK",
+            "expected": "Maxwell-Boltzmann shape with mode near 200 km/s (KS stat < 0.05)",
+            "status": "OK" if ks_stat_v < 0.05 else "CHECK",
         })
 
     # ── Binary parameters ───────────────────────────────────────────────────
@@ -576,6 +621,15 @@ def plot_ogle_validation(data):
     Panel B — cadence coverage: histogram of the fraction of time points that
     are non-NaN per event, showing how much of each light curve was "observed."
 
+    Panel C — blend fraction f_s: generated vs the OGLE-IV catalogue it is
+    bootstrapped from.
+
+    Panel D — observed baseline I_base = I_s + 2.5*log10(f_s): an INDEPENDENT
+    cross-check. I_s and f_s come from the fitted catalogue, while the reference
+    here is measured straight from the raw photometry (baseline_model.npz). The
+    two data products are unrelated, so agreement means the blending model really
+    does reproduce the brightnesses OGLE records.
+
     Returns (b64_str, stats_list) or (None, []) if model files are missing.
     """
     try:
@@ -583,6 +637,17 @@ def plot_ogle_validation(data):
         cm = np.load(_NOISE_DIR / "cadence_model.npz")
     except FileNotFoundError:
         return None, []
+
+    try:
+        bm = np.load(_NOISE_DIR / "blend_model.npz")
+        fs_ref, Is_ref = bm["fs"], bm["Is"]
+    except (FileNotFoundError, KeyError):
+        fs_ref, Is_ref = None, None
+
+    try:
+        base_ref = np.load(_NOISE_DIR / "baseline_model.npz")["baselines"]
+    except (FileNotFoundError, KeyError):
+        base_ref = None
 
     fit_params  = nm["fit_params"]
     I_ref_val   = float(nm["I_ref"][0])
@@ -594,30 +659,54 @@ def plot_ogle_validation(data):
     def _sig(I):
         return np.sqrt(sig_floor ** 2 + sig_phot0 ** 2 * 10.0 ** (0.4 * (I - I_ref_val)))
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    # Blending panels only exist if the dataset actually carries f_s.
+    f_s_gen = data.get("f_s_blend")
+    I_s_gen = data.get("I_s_mag")
+    show_blend = f_s_gen is not None and fs_ref is not None
+
+    if show_blend:
+        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(14, 11))
+    else:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+        ax3 = ax4 = None
     fig.suptitle("OGLE-IV Imperfections Validation", fontsize=15, fontweight="bold")
 
     # ── Panel A: σ(I) distribution — generated vs OGLE-IV reference ──────────
     time_cols = [c for c in data["df"].columns if c.startswith("t_") and c[2:].isdigit()]
+    time_cols = sorted(time_cols, key=lambda c: int(c[2:]))
     lc_mat    = data["df"][time_cols].values
-    obs_mask  = ~np.isnan(lc_mat)
+    obs_mask  = ~np.isnan(lc_mat)   # full mask (Panel B cadence coverage uses this)
 
-    I_obs_all = lc_mat[obs_mask]
+    # The synthetic curves densely sample the magnified peak, which the
+    # baseline-dominated OGLE reference does not. Pool only near-baseline points
+    # (|tau| > 2) so the noise-level comparison is like-with-like.
+    tau       = np.linspace(-3.0, 3.0, lc_mat.shape[1])
+    base_cols = np.abs(tau) > 2.0
+    lc_base   = lc_mat[:, base_cols]
+    I_obs_all = lc_base[~np.isnan(lc_base)]
     rng_p     = np.random.default_rng(0)
     n_s       = min(len(I_obs_all), 100_000)
     I_obs     = rng_p.choice(I_obs_all, size=n_s, replace=False)
     sigma_gen = _sig(np.clip(I_obs, 12.0, 22.5))
 
-    # Reference: sample bin_centers weighted by OGLE observation count per bin
-    probs     = n_per_bin / n_per_bin.sum()
-    I_ref_s   = rng_p.choice(bin_centers, size=50_000, p=probs)
+    # Reference magnitudes. The generated dataset is a population of EVENTS (each
+    # contributes equally), so the fair reference is the per-event baseline
+    # distribution, not the observation-weighted pool -- the latter over-counts
+    # heavily-monitored events and sits ~0.2 mag bright.
+    if base_ref is not None:
+        I_ref_s  = rng_p.choice(base_ref, size=50_000, replace=True)
+        ref_label = "OGLE-IV reference (per-event baselines)"
+    else:
+        probs    = n_per_bin / n_per_bin.sum()
+        I_ref_s  = rng_p.choice(bin_centers, size=50_000, p=probs)
+        ref_label = "OGLE-IV reference (observation-weighted)"
     sigma_ref = _sig(np.clip(I_ref_s, 12.0, 22.5))
 
     log_bins = np.logspace(np.log10(0.001), np.log10(1.0), 80)
     ax1.hist(sigma_ref, bins=log_bins, density=True, alpha=0.40, color="orange",
-             label="OGLE-IV reference (magnitude-weighted)")
+             label=ref_label)
     ax1.hist(sigma_gen, bins=log_bins, density=True, alpha=0.55, color="#2563eb",
-             label=f"Generated ({n_s:,} observed pts)")
+             label=f"Generated ({n_s:,} baseline pts, |tau|>2)")
     ax1.set_xscale("log")
     ax1.set_xlabel(r"$\sigma_I$ [mag]")
     ax1.set_ylabel("Probability Density")
@@ -629,7 +718,10 @@ def plot_ogle_validation(data):
         rng_p.choice(sigma_gen, size=n_ks_a, replace=True),
         rng_p.choice(sigma_ref, size=n_ks_a, replace=True),
     )
-    status_a = "OK" if p_a > 0.01 else "CHECK"
+    # Judge by the KS statistic (effect size), not the p-value: at ~10k samples
+    # the p-value is ~0 for any real distribution pair, so it can never pass.
+    # KS < 0.10 means the CDFs differ by < 10% -- a good distributional match.
+    status_a = "OK" if ks_a < 0.10 else "CHECK"
     ax1.set_title(
         f"Noise Level Distribution\nKS stat={ks_a:.3f}, p={p_a:.3g}  [{status_a}]",
         fontsize=11,
@@ -653,6 +745,94 @@ def plot_ogle_validation(data):
     ax2.set_xlim(0, 1)
     ax2.grid(True, alpha=0.3)
 
+    blend_stats = []
+    if show_blend:
+        f_s_gen = np.asarray(f_s_gen, dtype=float)
+
+        # ── Panel C: blend fraction f_s — generated vs catalogue ──────────────
+        fs_bins = np.linspace(0.0, 2.0, 60)
+        ax3.hist(fs_ref, bins=fs_bins, density=True, alpha=0.40, color="orange",
+                 label=f"OGLE-IV catalogue (n={len(fs_ref):,})")
+        ax3.hist(f_s_gen, bins=fs_bins, density=True, alpha=0.55, color="#2563eb",
+                 label=f"Generated (n={len(f_s_gen):,})")
+        ax3.axvline(1.0, color="red", ls="--", lw=1.2, alpha=0.7)
+        ax3.set_xlabel(r"Blend fraction  $f_s = F_{source}/F_{baseline}$")
+        ax3.set_ylabel("Probability Density")
+        ax3.legend(fontsize=9)
+        ax3.grid(True, alpha=0.3)
+
+        rng_b = np.random.default_rng(0)
+        n_fs = min(len(f_s_gen), 10_000)
+        ks_fs, p_fs = stats.ks_2samp(
+            rng_b.choice(f_s_gen, size=n_fs, replace=True), fs_ref
+        )
+        status_fs = "OK" if ks_fs < 0.05 else "CHECK"
+        ax3.set_title(
+            f"Blend Fraction f_s\nKS stat={ks_fs:.3f}  [{status_fs}]  median={np.median(f_s_gen):.3f}",
+            fontsize=11,
+        )
+        blend_stats.append({
+            "parameter": "Blend fraction f_s",
+            "reference": (
+                f"OGLE-IV event catalogue (fs_med), median {float(np.median(fs_ref)):.3f}; "
+                "drawn PAIRED with I_s so their correlation is preserved"
+            ),
+            "observed": f"KS stat={ks_fs:.4f} vs catalogue, median={float(np.median(f_s_gen)):.3f}",
+            "expected": "Bootstrapped from the catalogue (KS stat < 0.05)",
+            "status": status_fs,
+        })
+
+        # ── Panel D: observed baseline I_base — INDEPENDENT cross-check ───────
+        # I_base is derived from the fitted catalogue (I_s, f_s); the reference is
+        # measured from the raw photometry. Two unrelated OGLE data products.
+        if I_s_gen is not None and base_ref is not None:
+            I_base_gen = np.asarray(I_s_gen, float) + 2.5 * np.log10(
+                np.maximum(f_s_gen, 1e-10)
+            )
+            b_bins = np.linspace(12.0, 22.5, 60)
+            ax4.hist(base_ref, bins=b_bins, density=True, alpha=0.40, color="orange",
+                     label=f"OGLE-IV photometry (n={len(base_ref):,})")
+            ax4.hist(I_base_gen, bins=b_bins, density=True, alpha=0.55, color="#2563eb",
+                     label=f"Generated (n={len(I_base_gen):,})")
+            ax4.axvline(float(np.median(I_base_gen)), color="navy", ls="--", lw=1.5,
+                        label=f"Median: {float(np.median(I_base_gen)):.2f} mag")
+            ax4.set_xlabel(r"Observed baseline  $I_{base} = I_s + 2.5\log_{10} f_s$  [mag]")
+            ax4.set_ylabel("Probability Density")
+            ax4.legend(fontsize=9)
+            ax4.grid(True, alpha=0.3)
+
+            n_bs = min(len(I_base_gen), 10_000)
+            ks_b, p_b = stats.ks_2samp(
+                rng_b.choice(I_base_gen, size=n_bs, replace=True), base_ref
+            )
+            d_med = float(np.median(I_base_gen)) - float(np.median(base_ref))
+            # Loose threshold: this is a cross-check between two INDEPENDENT data
+            # products (fitted catalogue vs raw photometry), not a bootstrap of one.
+            status_b = "OK" if abs(d_med) <= 0.30 else "CHECK"
+            ax4.set_title(
+                f"Observed Baseline I_base — independent cross-check\n"
+                f"KS stat={ks_b:.3f}, offset={d_med:+.2f} mag  [{status_b}]",
+                fontsize=11,
+            )
+            blend_stats.append({
+                "parameter": "Observed baseline I_base (cross-check)",
+                "reference": (
+                    f"OGLE-IV raw photometry, per-event baselines (baseline_model.npz), "
+                    f"median {float(np.median(base_ref)):.2f} mag"
+                ),
+                "observed": (
+                    f"median={float(np.median(I_base_gen)):.2f} mag "
+                    f"(offset {d_med:+.2f}), KS stat={ks_b:.4f}"
+                ),
+                "expected": (
+                    "I_base derived from the fitted catalogue should reproduce the "
+                    "independently measured photometric baseline (offset < 0.30 mag)"
+                ),
+                "status": status_b,
+            })
+        elif ax4 is not None:
+            ax4.axis("off")
+
     fig.tight_layout()
     b64 = _fig_to_b64(fig)
 
@@ -663,8 +843,8 @@ def plot_ogle_validation(data):
                 f"OGLE-IV empirical noise (3 000 EWS events): "
                 f"sigma_floor={sig_floor:.5f} mag, sigma_phot0={sig_phot0:.5f} mag at I=18"
             ),
-            "observed": f"KS stat={ks_a:.4f} (p={p_a:.3g}) vs OGLE reference, {n_s:,} observed pts",
-            "expected": "Noise level distribution matches OGLE-IV reference (KS p > 0.01)",
+            "observed": f"KS stat={ks_a:.4f} vs OGLE reference, {n_s:,} baseline pts (|tau|>2)",
+            "expected": "Noise level distribution matches OGLE-IV reference (KS stat < 0.10)",
             "status": status_a,
         },
         {
@@ -674,16 +854,17 @@ def plot_ogle_validation(data):
             "expected": "Fraction < 100% (cadence gaps present in each light curve)",
             "status": "OK" if mean_frac < 0.99 else "CHECK",
         },
-    ]
+    ] + blend_stats
 
     return b64, stats_entries
 
 
 def plot_distributions_ogle(data):
-    """Informational two-panel figure shown after generation when ogle_noise=True.
+    """Informational figure shown after generation when ogle_noise=True.
 
     Panel A — the σ(I) noise model that was applied, overlaid on OGLE-IV reference.
     Panel B — the cadence Δt distribution that was bootstrap-resampled per event.
+    Panel C — the blend fraction f_s applied, vs the OGLE-IV catalogue (if present).
     """
     try:
         nm = np.load(_NOISE_DIR / "noise_model.npz")
@@ -691,7 +872,19 @@ def plot_distributions_ogle(data):
     except FileNotFoundError:
         return None
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    try:
+        fs_ref = np.load(_NOISE_DIR / "blend_model.npz")["fs"]
+    except (FileNotFoundError, KeyError):
+        fs_ref = None
+
+    f_s_gen = data.get("f_s_blend")
+    show_blend = f_s_gen is not None and fs_ref is not None
+
+    if show_blend:
+        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(20, 6))
+    else:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+        ax3 = None
     fig.suptitle(
         "OGLE-IV Imperfections Applied to Dataset",
         fontsize=15, fontweight="bold",
@@ -747,6 +940,29 @@ def plot_distributions_ogle(data):
     )
     ax2.legend(fontsize=9)
     ax2.grid(True, which="both", alpha=0.25)
+
+    # ── Panel C: blend fraction f_s applied ──────────────────────────────────
+    if show_blend:
+        f_s_gen = np.asarray(f_s_gen, dtype=float)
+        fs_bins = np.linspace(0.0, 2.0, 60)
+        ax3.hist(fs_ref, bins=fs_bins, density=True, alpha=0.40, color="orange",
+                 label=f"OGLE-IV catalogue (n={len(fs_ref):,})")
+        ax3.hist(f_s_gen, bins=fs_bins, density=True, alpha=0.60, color="#2563eb",
+                 label=f"Applied to dataset (n={len(f_s_gen):,})")
+        ax3.axvline(float(np.median(f_s_gen)), color="red", ls="--", lw=1.5,
+                    label=f"Median: {float(np.median(f_s_gen)):.3f}")
+        # f_s > 1 is not physical; it survives in the catalogue as fit scatter on
+        # nearly-unblended events, and is kept so the distribution stays unbiased.
+        ax3.axvspan(1.0, 2.0, color="red", alpha=0.06, zorder=0)
+        ax3.set_xlim(0, 2)
+        ax3.set_xlabel(r"Blend fraction  $f_s = F_{source}/F_{baseline}$")
+        ax3.set_ylabel("Probability Density")
+        ax3.set_title(
+            "Blending Applied\n"
+            "(drawn paired with I_s from the OGLE-IV catalogue)"
+        )
+        ax3.legend(fontsize=9)
+        ax3.grid(True, alpha=0.3)
 
     fig.tight_layout()
     return _fig_to_b64(fig)

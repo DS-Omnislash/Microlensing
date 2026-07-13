@@ -22,6 +22,7 @@ from .distributions import (
     sample_mass_ratio,
     sample_semi_major_axis,
 )
+from .ogle_noise import sample_blend_pair
 
 _N = 100_000
 _RNG = np.random.default_rng(42)
@@ -98,7 +99,7 @@ def _fig(samples, xlabel, x_lo, x_hi, log10=False, bw=None, zero_outside=True):
 def _compute_all() -> dict:
     rng = _RNG
     n = _N
-    return {
+    plots = {
         "M_star_solar": _fig(
             sample_lens_mass(n, rng),
             "Lens Mass (Msun)", x_lo=0.0, x_hi=1.25,
@@ -136,6 +137,21 @@ def _compute_all() -> dict:
             "I_s (mag)", x_lo=14.0, x_hi=22.0,
         ),
     }
+
+    # OGLE-mode variant: with OGLE imperfections enabled, I_s is not sampled from
+    # the theoretical distribution above but bootstrapped from the real OGLE-IV
+    # event catalogue (paired with its blend fraction f_s, median ~19.5 mag). The
+    # UI swaps to this curve when OGLE mode is selected, so the reference always
+    # matches what is actually generated.
+    ogle_pair = sample_blend_pair(n, rng)
+    if ogle_pair is not None:
+        ogle_Is, _ = ogle_pair
+        plots["I_s_mag_ogle"] = _fig(
+            ogle_Is,
+            "I_s (mag) — OGLE-IV catalogue", x_lo=12.0, x_hi=22.5,
+        )
+
+    return plots
 
 
 DISTRIBUTION_PLOTS: dict = _compute_all()

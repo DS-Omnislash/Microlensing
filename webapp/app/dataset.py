@@ -9,7 +9,10 @@ from .lightcurves import (
     compute_einstein_quantities,
     compute_single_lightcurves,
 )
-from .ogle_noise import apply_ogle_imperfections
+from .ogle_noise import (
+    apply_ogle_imperfections,
+    sample_blend_pair,
+)
 
 SEED = 42
 
@@ -87,13 +90,36 @@ def generate_dataset(n_total: int, binary_fraction: float, n_time: int, seed: in
 
     # --- Optional magnitude conversion ---
     I_s_mag = None
+    f_s_blend = None
     if use_magnitudes:
-        I_s_mag = dist.sample_baseline_magnitude(n_total, rng)
-        # I(t) = I_s - 2.5 * log10(A(t)); guard against A<=0 edge cases
-        all_lightcurves = (
-            I_s_mag[:, np.newaxis]
-            - 2.5 * np.log10(np.maximum(all_lightcurves, 1e-10))
-        )
+        A = np.maximum(all_lightcurves, 1e-10)  # amplification, guard A<=0
+        if ogle_noise:
+            # Real OGLE-IV photometry is blended: F_obs = A*F_source + F_blend.
+            # (I_s, f_s) are drawn as a PAIR from the same real catalogue event, so
+            # their correlation survives (brighter sources are less blended). The
+            # observed baseline then follows from them:
+            #     I_base = I_s + 2.5*log10(f_s)
+            #     I(t)   = I_base - 2.5*log10( f_s*A + (1 - f_s) )
+            # At baseline (A=1) this is I_base, so brightnesses -- and the sigma(I)
+            # noise applied to them -- follow real OGLE data; the peaks are
+            # correctly diluted by the constant blend. (f_s = 1 -> unblended.)
+            pair = sample_blend_pair(n_total, rng)
+            if pair is None:  # blend model missing -> fall back to unblended theory
+                I_s_mag = dist.sample_baseline_magnitude(n_total, rng)
+                f_s_blend = np.ones(n_total, dtype=np.float64)
+            else:
+                I_s_mag, f_s_blend = pair
+
+            I_base = I_s_mag + 2.5 * np.log10(f_s_blend)
+            f_s = f_s_blend[:, np.newaxis]
+            all_lightcurves = (
+                I_base[:, np.newaxis]
+                - 2.5 * np.log10(np.maximum(f_s * A + (1.0 - f_s), 1e-10))
+            )
+        else:
+            # Idealised (unblended) source magnitude: I(t) = I_s - 2.5*log10(A).
+            I_s_mag = dist.sample_baseline_magnitude(n_total, rng)
+            all_lightcurves = I_s_mag[:, np.newaxis] - 2.5 * np.log10(A)
 
     # --- Optional OGLE-IV imperfections (noise + cadence gaps) ---
     if use_magnitudes and ogle_noise:
@@ -137,6 +163,8 @@ def generate_dataset(n_total: int, binary_fraction: float, n_time: int, seed: in
 
     if use_magnitudes:
         params_dict["I_s_mag"] = I_s_mag
+    if f_s_blend is not None:
+        params_dict["f_s_blend"] = f_s_blend
 
     df_params = pd.DataFrame(params_dict)
     df_lightcurves = pd.DataFrame(all_lightcurves, columns=time_cols, dtype=np.float64)
@@ -162,5 +190,6 @@ def generate_dataset(n_total: int, binary_fraction: float, n_time: int, seed: in
         "single_lightcurves": single_lightcurves,
         "binary_lightcurves": binary_lightcurves,
         "I_s_mag": I_s_mag,
+        "f_s_blend": f_s_blend,
         "ogle_noise": ogle_noise,
     }

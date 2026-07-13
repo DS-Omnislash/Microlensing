@@ -557,7 +557,26 @@ genClassifyBtn.addEventListener("click", async () => {
     const plots = JSON.parse(dataEl.textContent);
     const config = { displayModeBar: false, responsive: true };
     for (const [key, fig] of Object.entries(plots)) {
+        if (key.endsWith("_ogle")) continue;   // mode variant, not its own panel
         const el = document.getElementById(`dist-plot-${key}`);
         if (el) Plotly.newPlot(el, fig.data, fig.layout, config);
+    }
+
+    // The baseline magnitude reference depends on the imperfections mode: in OGLE
+    // mode the baseline is drawn from the real OGLE-IV observed distribution
+    // (blended, median ~18.7 mag), not the theoretical source one (~19.8 mag).
+    // Swap the curve so the reference always matches what is actually generated.
+    const isEl = document.getElementById("dist-plot-I_s_mag");
+    const ogleFig = plots["I_s_mag_ogle"];
+    const baseFig = plots["I_s_mag"];
+    if (isEl && ogleFig && baseFig) {
+        const renderBaseline = () => {
+            const useOgle = document.querySelector('input[name="ogle_noise"]:checked')?.value === "ogle";
+            const fig = useOgle ? ogleFig : baseFig;
+            Plotly.react(isEl, fig.data, fig.layout, config);
+        };
+        document.querySelectorAll('input[name="ogle_noise"]').forEach((radio) =>
+            radio.addEventListener("change", renderBaseline));
+        renderBaseline();
     }
 })();
