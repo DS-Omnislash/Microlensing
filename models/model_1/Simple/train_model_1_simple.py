@@ -18,7 +18,43 @@ magnitudes sampled on tau in [-3, 3].
 
 Labels are remapped 1 -> 0 (single), 2 -> 1 (binary) for the sigmoid output.
 
-Class imbalance (90/10) is handled with a weighted loss (pos_weight = 9).
+Class imbalance (85/15) is handled with a weighted loss (pos_weight = n_single
+/ n_binary, computed from the training split).
+
+Input representation -- the symmetry residual
+---------------------------------------------
+A single-lens (Paczynski) curve is EXACTLY symmetric in tau about the peak:
+u(tau) = sqrt(u0^2 + tau^2) is even, so I(tau) = I(-tau). A binary lens breaks
+that symmetry -- the anomaly IS the departure from Paczynski symmetry. The
+network is therefore given two channels:
+
+    channel 0 : per-curve z-scored magnitude          (the light curve)
+    channel 1 : per-curve z-scored fold residual      R(tau) = I(tau) - I(-tau)
+
+Channel 1 matters because most binaries in a realistic mass-ratio population
+(median q ~ 1e-3) perturb the curve by only a few millimagnitudes on top of a
+~1.7 mag lensing peak, and global average pooling discards the positional
+information that asymmetry lives in. Folding the curve makes that anomaly the
+signal instead of a rounding-level wiggle on a large peak.
+
+BOTH channels are divided by the SAME scale (the curve's std). Do not normalize
+the residual on its own scale: that discards amplitude, so a 1e-7 mag artefact
+and a 0.5 mag caustic spike both become an O(1) pattern. Since a noiseless
+Paczynski curve is symmetric to the last bit, that turns channel 1 into an exact
+"is this curve symmetric?" giveaway and the model scores a meaningless F1 = 1.000
+off floating-point dust -- a zero-parameter script does just as well. Sharing the
+curve's scale keeps every anomaly at its true physical size, so the network can
+only detect what is genuinely there.
+
+Decision threshold
+------------------
+pos_weight already compensates the class imbalance by shifting probabilities
+upward, so cutting at 0.50 would correct for the imbalance a second time and
+flood the binary class with false positives. The threshold is therefore selected
+by maximising F1 on the VALIDATION set -- never on the test set, which would leak
+and inflate the result -- and the test set is then evaluated once at that
+threshold. It is stored in the checkpoint as ``decision_threshold`` and inference
+must use it.
 
 Outputs (written next to this script)
 -------------------------------------
@@ -61,7 +97,7 @@ import matplotlib.pyplot as plt
 # Configuration
 # --------------------------------------------------------------------------- #
 HERE = Path(__file__).resolve().parent
-CSV_PATH = HERE / "Microlensing_Dataset_100000_10%_400pts_I(t)_Classification.csv"
+CSV_PATH = HERE / "Microlensing_Dataset_100000_15pct_400pts_I_Classification.csv"
 
 MODEL_OUT = HERE / "model_1_simple.pt"
 HISTORY_PLOT = HERE / "training_history.png"
@@ -93,12 +129,16 @@ def load_dataset(csv_path: Path) -> tuple[np.ndarray, np.ndarray]:
     df = pd.read_csv(csv_path)
 
     label_col = "event_lenses"
-    point_cols = [c for c in df.columns if c.startswith("t_")]
+    # Only true light-curve columns t_000..t_399 -- exclude parameter columns
+    # that also start with "t_" (e.g. t_E_days), matching webapp/app/model1.py.
+    point_cols = [c for c in df.columns if c.startswith("t_") and str(c)[2:].isdigit()]
     if len(point_cols) != N_POINTS:
         raise ValueError(
             f"Expected {N_POINTS} light-curve columns, found {len(point_cols)}"
         )
 
+    # Order columns by numeric time index (t_000, t_001, ...).
+    point_cols = sorted(point_cols, key=lambda c: int(str(c)[2:]))
     X = df[point_cols].to_numpy(dtype=np.float32)
     raw_labels = df[label_col].to_numpy()
 
@@ -112,18 +152,40 @@ def load_dataset(csv_path: Path) -> tuple[np.ndarray, np.ndarray]:
     return X, y
 
 
-def normalize_per_curve(X: np.ndarray) -> np.ndarray:
-    """Standardize each light curve independently (z-score per row).
+def build_inputs(X: np.ndarray) -> np.ndarray:
+    """Turn (N, 400) magnitudes into the (N, 2, 400) two-channel input.
 
-    Magnitudes carry an arbitrary per-event baseline (source brightness I_s).
-    Removing each curve's own mean/std makes the model focus on the *shape*
-    of the lensing signal rather than absolute brightness. This is also
-    robust to the magnitude->flux sign convention.
+    channel 0 : magnitude, centred and scaled by the curve's own std
+    channel 1 : fold residual R(tau) = I(tau) - I(-tau), scaled by the SAME std
+
+    Centring removes each event's arbitrary baseline (source brightness I_s) so
+    the model sees only the lensing *shape*; the shared scale then keeps the
+    anomaly's size relative to the lensing peak intact (see the comments below).
+
+    The tau grid is symmetric about 0, so reversing a row folds it about the
+    peak; for a single lens I(tau) == I(-tau) exactly and the residual is zero.
+    Both ops are per-row, so applying them after the train/test split leaks
+    nothing.
     """
-    mean = X.mean(axis=1, keepdims=True)
-    std = X.std(axis=1, keepdims=True)
-    std = np.where(std < 1e-8, 1.0, std)  # guard flat curves
-    return (X - mean) / std
+    # The residual is scaled by the CURVE's std, NOT its own. This is the whole
+    # ballgame. Dividing the residual by its own std would discard amplitude --
+    # a 1e-7 mag rounding artefact and a 0.5 mag caustic spike would both come out
+    # as an O(1) pattern, handing the network an exact "is it symmetric?" bit and a
+    # meaningless F1 = 1.000 (a zero-parameter script scores the same). Sharing the
+    # curve's scale keeps the anomaly at its true physical size relative to the
+    # lensing peak, so the model can only detect what is actually there: a 1e-6 mag
+    # artefact stays ~1e-5 input units while a real caustic spike is ~0.7.
+    # (BatchNorm does not undo this: it rescales each conv channel across the BATCH,
+    # one global factor, so relative amplitude between samples survives -- unlike a
+    # per-sample z-score.)
+    X64 = X.astype(np.float64)
+    mean = X64.mean(axis=1, keepdims=True)
+    std = X64.std(axis=1, keepdims=True)
+    std = np.where(std < 1e-8, 1.0, std)
+    curve = (X64 - mean) / std
+    residual = (X64 - X64[:, ::-1]) / std
+
+    return np.stack([curve, residual], axis=1).astype(np.float32)   # (N, 2, 400)
 
 
 # --------------------------------------------------------------------------- #
@@ -135,12 +197,15 @@ class LightCurveCNN(nn.Module):
     Three convolutional blocks pick up local morphology (smooth Paczynski
     peak vs. sharp caustic-crossing spikes), followed by global average
     pooling and a small classifier head. Outputs a single logit (BCE).
+
+    The first conv takes 2 channels: the z-scored light curve and the z-scored
+    fold residual R(tau) = I(tau) - I(-tau) (see build_inputs).
     """
 
     def __init__(self) -> None:
         super().__init__()
         self.features = nn.Sequential(
-            nn.Conv1d(1, 32, kernel_size=7, padding=3),
+            nn.Conv1d(2, 32, kernel_size=7, padding=3),   # 2 channels: mag + residual
             nn.BatchNorm1d(32),
             nn.ReLU(inplace=True),
             nn.MaxPool1d(2),                       # 400 -> 200
@@ -164,8 +229,7 @@ class LightCurveCNN(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: (B, 400) -> (B, 1, 400)
-        x = x.unsqueeze(1)
+        # x: (B, 2, 400)
         x = self.features(x)
         return self.classifier(x).squeeze(1)       # (B,)
 
@@ -193,6 +257,50 @@ def evaluate(model: nn.Module, loader: DataLoader) -> tuple[float, np.ndarray, n
     return float(np.mean(losses)), np.concatenate(probs), np.concatenate(trues)
 
 
+def anomaly_amplitude(X: np.ndarray) -> np.ndarray:
+    """Max |I(tau) - I(-tau)| per curve, in magnitudes -- the true anomaly size.
+
+    Zero for a single lens (Paczynski is exactly symmetric in tau), so for a
+    binary this is the physical size of the deviation the model has to find.
+    """
+    X64 = X.astype(np.float64)
+    return np.abs(X64 - X64[:, ::-1]).max(axis=1)
+
+
+def report_detection_efficiency(
+    amp: np.ndarray, y_true: np.ndarray, y_pred: np.ndarray
+) -> None:
+    """Recall vs. the PHYSICAL size of the anomaly -- the honesty check.
+
+    A model doing real physics detects big anomalies and misses tiny ones, so
+    recall must RISE with amplitude. Flat recall near 1.0 in the smallest bin is
+    the tell-tale of a shortcut: nothing physical is detectable at 1e-6 mag, so a
+    model that "finds" those is keying on the exact-symmetry bit (a noiseless
+    Paczynski curve is symmetric to the last bit, so ANY nonzero residual is a
+    perfect label) rather than on morphology. See also the zero-parameter baseline.
+    """
+    print("\nDetection efficiency vs. anomaly amplitude (test set, binaries only)")
+    print("  anomaly [mag]        n      recall")
+    edges = [0.0, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, np.inf]
+    labels = ["< 1e-5 (numerical)", "1e-5 .. 1e-4", "1e-4 .. 1e-3",
+              "1e-3 .. 1e-2", "1e-2 .. 0.1", "> 0.1 (obvious)"]
+    for lo, hi, lab in zip(edges[:-1], edges[1:], labels):
+        sel = (y_true == 1) & (amp >= lo) & (amp < hi)
+        if sel.sum():
+            print(f"  {lab:20s} {sel.sum():5d}    {y_pred[sel].mean():.3f}")
+
+    # A rule with no weights: "the curve is not perfectly symmetric" -> binary.
+    # On noiseless data this is EXACTLY separable, so it scores ~1.0. If the model
+    # matches it, the model has learned nothing a two-line script cannot do.
+    trivial = (amp > 0).astype(int)
+    print(f"\n  Zero-parameter baseline ('residual != 0' -> binary): "
+          f"F1 = {f1_score(y_true, trivial, zero_division=0):.4f}")
+    print(f"  Model:                                               "
+          f"F1 = {f1_score(y_true, y_pred, zero_division=0):.4f}")
+    print("  (The baseline is the noiseless ceiling and is physically empty -- it")
+    print("   fires on 1e-7 mag rounding dust. The model should NOT match it.)")
+
+
 def main() -> None:
     torch.manual_seed(SEED)
     np.random.seed(SEED)
@@ -201,7 +309,7 @@ def main() -> None:
     if not CSV_PATH.exists():
         raise FileNotFoundError(
             f"Dataset not found: {CSV_PATH}\n"
-            "Generate it from the webapp (100k, 90/10, 400 pts, I(t), no OGLE)."
+            "Generate it from the webapp (100k, 85/15, 400 pts, I(t), no OGLE)."
         )
 
     # ---- load & split ----------------------------------------------------- #
@@ -214,10 +322,15 @@ def main() -> None:
         X_train, y_train, test_size=VAL_SIZE, stratify=y_train, random_state=SEED
     )
 
-    # Normalize each curve independently (no train/test leakage -- per-row op).
-    X_train = normalize_per_curve(X_train)
-    X_val = normalize_per_curve(X_val)
-    X_test = normalize_per_curve(X_test)
+    # True anomaly size of each test curve, kept for the detection-efficiency
+    # report below (measured on the RAW magnitudes, before any normalization).
+    test_amplitude = anomaly_amplitude(X_test)
+
+    # Build the 2-channel input: curve + fold residual, on a shared scale.
+    # Per-row ops, so doing this after the split leaks nothing.
+    X_train = build_inputs(X_train)
+    X_val = build_inputs(X_val)
+    X_test = build_inputs(X_test)
 
     print(f"  train: {len(y_train):,}  val: {len(y_val):,}  test: {len(y_test):,}")
 
@@ -285,25 +398,45 @@ def main() -> None:
                 print(f"Early stopping at epoch {epoch} (best val_F1={best_val_f1:.4f})")
                 break
 
-    # ---- restore best & final test evaluation ----------------------------- #
+    # ---- restore best & pick the decision threshold ------------------------ #
     if best_state is not None:
         model.load_state_dict(best_state)
 
+    # pos_weight already shifts probabilities upward to compensate the class
+    # imbalance; cutting at 0.50 would correct for it twice and flood the binary
+    # class with false positives. The cut-off is therefore chosen properly -- on the
+    # VALIDATION set, never on the test set, which would leak and inflate the score.
+    _, val_probs, val_true = evaluate(model, val_loader)
+    grid = np.linspace(0.05, 0.95, 91)
+    val_f1s = [f1_score(val_true, (val_probs >= t).astype(int), zero_division=0)
+               for t in grid]
+    best_threshold = float(grid[int(np.argmax(val_f1s))])
+    print(f"\nDecision threshold selected on validation: {best_threshold:.2f} "
+          f"(val F1={max(val_f1s):.4f}; F1 at 0.50 would be "
+          f"{f1_score(val_true, (val_probs >= 0.5).astype(int), zero_division=0):.4f})")
+
+    # ---- final test evaluation (test set touched once, at that threshold) --- #
     test_loss, test_probs, test_true = evaluate(model, test_loader)
-    test_pred = (test_probs >= 0.5).astype(int)
+    test_pred = (test_probs >= best_threshold).astype(int)
     test_f1 = f1_score(test_true, test_pred, zero_division=0)
     test_auc = roc_auc_score(test_true, test_probs)
+    test_f1_at_half = f1_score(test_true, (test_probs >= 0.5).astype(int),
+                               zero_division=0)
 
     print("\n" + "=" * 60)
     print("TEST SET PERFORMANCE")
     print("=" * 60)
-    print(f"  loss : {test_loss:.4f}")
-    print(f"  F1   : {test_f1:.4f}")
-    print(f"  AUC  : {test_auc:.4f}")
+    print(f"  threshold : {best_threshold:.2f}  (chosen on validation)")
+    print(f"  loss      : {test_loss:.4f}")
+    print(f"  F1        : {test_f1:.4f}   (at the naive 0.50: {test_f1_at_half:.4f})")
+    print(f"  AUC       : {test_auc:.4f}   (threshold-independent)")
     print("\n" + classification_report(
         test_true, test_pred, target_names=["single", "binary"], digits=4,
         zero_division=0,
     ))
+
+    # ---- honesty check ----------------------------------------------------- #
+    report_detection_efficiency(test_amplitude, test_true, test_pred)
 
     # ---- save model + metadata -------------------------------------------- #
     torch.save(
@@ -311,8 +444,10 @@ def main() -> None:
             "model_state_dict": model.state_dict(),
             "architecture": "LightCurveCNN",
             "n_points": N_POINTS,
-            "normalization": "per_curve_zscore",
+            "normalization": "per_curve_zscore_fold_residual",
             "label_map": {"single": 0, "binary": 1},
+            # Inference MUST use this, not 0.5 -- see the threshold selection above.
+            "decision_threshold": best_threshold,
             "config": {
                 "batch_size": BATCH_SIZE,
                 "epochs": EPOCHS,
@@ -321,7 +456,13 @@ def main() -> None:
                 "pos_weight": float(pos_weight.item()),
                 "seed": SEED,
             },
-            "test_metrics": {"f1": test_f1, "auc": test_auc, "loss": test_loss},
+            "test_metrics": {
+                "f1": test_f1,
+                "auc": test_auc,
+                "loss": test_loss,
+                "threshold": best_threshold,
+                "f1_at_0.5": test_f1_at_half,
+            },
         },
         MODEL_OUT,
     )
@@ -356,7 +497,10 @@ def main() -> None:
     ax.set_yticks([0, 1], labels=["single", "binary"])
     ax.set_xlabel("predicted")
     ax.set_ylabel("true")
-    ax.set_title(f"Confusion matrix (test)\nF1={test_f1:.3f}  AUC={test_auc:.3f}")
+    ax.set_title(
+        f"Confusion matrix (test)\n"
+        f"F1={test_f1:.3f}  AUC={test_auc:.3f}  threshold={best_threshold:.2f}"
+    )
     for i in range(2):
         for j in range(2):
             ax.text(

@@ -30,7 +30,10 @@ MODEL_PATH = (
 )
 
 N_POINTS = 400                  # the Simple model is fixed to 400-point curves
-DECISION_THRESHOLD = 0.5        # prob_binary >= threshold -> "binary"
+# Fallback only. The real cut-off is chosen by maximising F1 on the validation set
+# during training and stored in the checkpoint as "decision_threshold"; pos_weight
+# already shifts probabilities upward, so a naive 0.5 double-corrects the imbalance.
+_FALLBACK_THRESHOLD = 0.5
 _TIME_COL_RE = re.compile(r"^t_\d+$")
 
 
@@ -44,7 +47,7 @@ class LightCurveCNN(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.features = nn.Sequential(
-            nn.Conv1d(1, 32, kernel_size=7, padding=3),
+            nn.Conv1d(2, 32, kernel_size=7, padding=3),   # 2 channels: mag + residual
             nn.BatchNorm1d(32),
             nn.ReLU(inplace=True),
             nn.MaxPool1d(2),
@@ -68,17 +71,22 @@ class LightCurveCNN(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x.unsqueeze(1)
+        # x: (B, 2, 400)
         x = self.features(x)
         return self.classifier(x).squeeze(1)
 
 
 _model: LightCurveCNN | None = None
+_threshold: float | None = None
 
 
 def _get_model() -> LightCurveCNN:
-    """Lazily load and cache the trained model (loaded once per process)."""
-    global _model
+    """Lazily load and cache the trained model (loaded once per process).
+
+    Also caches the decision threshold chosen on the validation set at training
+    time; it is stored in the checkpoint and must be used instead of 0.5.
+    """
+    global _model, _threshold
     if _model is None:
         if not MODEL_PATH.exists():
             raise ModelDatasetError(
@@ -90,19 +98,39 @@ def _get_model() -> LightCurveCNN:
         model.load_state_dict(checkpoint["model_state_dict"])
         model.eval()
         _model = model
+        _threshold = float(
+            checkpoint.get("decision_threshold", _FALLBACK_THRESHOLD)
+        )
     return _model
 
 
-def normalize_per_curve(X: np.ndarray) -> np.ndarray:
-    """Standardize each light curve independently (z-score per row).
+def _get_threshold() -> float:
+    """Decision threshold from the checkpoint (model is loaded if needed)."""
+    _get_model()
+    return _threshold if _threshold is not None else _FALLBACK_THRESHOLD
 
-    Identical to training: removes each event's arbitrary magnitude baseline so
-    the model sees only the lensing *shape*.
+
+def build_inputs(X: np.ndarray) -> np.ndarray:
+    """Turn (N, 400) magnitudes into the (N, 2, 400) two-channel input.
+
+    Mirror of train_model_1_simple.build_inputs:
+        channel 0 : magnitude, centred and scaled by the curve's own std
+        channel 1 : fold residual R(tau) = I(tau) - I(-tau), scaled by the SAME std
+
+    A single-lens (Paczynski) curve is exactly symmetric in tau, so its residual
+    is identically zero; a binary's anomaly is precisely what survives the fold.
+
+    Both channels share the curve's scale so the anomaly keeps its true physical
+    size. Normalizing the residual on its OWN scale would discard amplitude and
+    make a 1e-7 mag rounding artefact look identical to a real caustic spike.
     """
-    mean = X.mean(axis=1, keepdims=True)
-    std = X.std(axis=1, keepdims=True)
+    X64 = X.astype(np.float64)
+    mean = X64.mean(axis=1, keepdims=True)
+    std = X64.std(axis=1, keepdims=True)
     std = np.where(std < 1e-8, 1.0, std)
-    return (X - mean) / std
+    curve = (X64 - mean) / std
+    residual = (X64 - X64[:, ::-1]) / std
+    return np.stack([curve, residual], axis=1).astype(np.float32)   # (N, 2, 400)
 
 
 def _extract_lightcurves(df: pd.DataFrame) -> np.ndarray:
@@ -169,7 +197,7 @@ def validate_model_dataset(df: pd.DataFrame) -> np.ndarray:
 def predict(X: np.ndarray) -> np.ndarray:
     """Return per-event binary-class probabilities for a validated matrix."""
     model = _get_model()
-    Xn = normalize_per_curve(X)
+    Xn = build_inputs(X)
     probs = []
     for start in range(0, len(Xn), 1024):
         batch = torch.from_numpy(Xn[start : start + 1024])
@@ -181,7 +209,7 @@ def predict(X: np.ndarray) -> np.ndarray:
 def _summarize(X: np.ndarray) -> dict:
     """Run the model on a validated matrix and summarize counts."""
     prob_binary = predict(X)
-    pred = (prob_binary >= DECISION_THRESHOLD).astype(int)
+    pred = (prob_binary >= _get_threshold()).astype(int)
 
     n_total = int(len(pred))
     n_binary = int((pred == 1).sum())
