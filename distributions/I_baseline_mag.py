@@ -10,7 +10,7 @@ Source: Mroz et al. (2019), table3.dat — Warsaw Observatory
         Column: Is_med (source magnitude, median posterior)
 
 Color: #e67e22 (orange)
-Reference: TDR_ROC.pdf — baseline magnitude for photon noise model
+Reference: TdR_RocRC.pdf — baseline magnitude for photon noise model
 """
 
 import io

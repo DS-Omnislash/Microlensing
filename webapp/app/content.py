@@ -1,11 +1,11 @@
 ﻿"""Static explanatory content describing the distribution logic.
 
-All references are to ``TDR_ROC.pdf`` (Roc Rubio, "Gravitational
+All references are to ``TdR_RocRC.pdf`` (Roc Rubio, "Gravitational
 Microlensing"), section "Parameters distributions" (pp. 20-29).
 """
 
-# Recommended single/binary split, used as the default in
-# Dataset1generator.ipynb (95,000 single + 5,000 binary = 100,000 events).
+# Recommended single/binary split, matching the reference dataset of this
+# study (95,000 single + 5,000 binary = 100,000 events).
 RECOMMENDED_BINARY_PERCENT = 5.0
 RECOMMENDED_N_TIME = 400
 
@@ -15,8 +15,7 @@ EVENT_RATIO_EXPLANATION = (
     "alerts turn out to be single-lens (point-source point-lens) events. "
     "The reference dataset in this study used 95,000 single-lens events and "
     "5,000 binary-lens events (a 95% / 5% split), which keeps the binary "
-    "class representative without overwhelming the dataset with the much "
-    "more expensive per-event Jacobian ray-shooting computation."
+    "class representative of how rare planetary events are in real surveys."
 )
 
 N_TIME_EXPLANATION = (
@@ -132,10 +131,12 @@ PARAMETER_INFO = [
         "formula": "log10(q) ~ N(log10(1.43e-3), 1.0^2), clipped to [1e-6, 0.999]",
         "reference": "TdR Image 3, p.21 (NASA Exoplanet Archive)",
         "explanation": (
-            "q = M_planet / (M_star + M_planet) sets how strongly the "
-            "secondary body perturbs the light curve. Computed from "
-            "confirmed binary/planetary systems, it is well described by a "
-            "log-normal distribution peaking near q ~ 1.43e-3."
+            "q = m_p / m_star, the ratio of the two bodies' fractional "
+            "masses m_i = M_i / (M_planet + M_star), which reduces to "
+            "M_planet / M_star. It sets how strongly the secondary body "
+            "perturbs the light curve. Computed from confirmed "
+            "binary/planetary systems, it is well described by a log-normal "
+            "distribution peaking near q ~ 1.43e-3."
         ),
     },
     {
@@ -143,15 +144,22 @@ PARAMETER_INFO = [
         "name": "Semi-major Axis (a)",
         "unit": "parsecs (pc)",
         "applies_to": "Binary-lens events only",
-        "distribution": "Bimodal log-normal",
-        "formula": "0.70 x LogN(10^-6.4, 0.35) + 0.30 x LogN(10^-5.0, 0.40), clipped to [1e-8, 0.1]",
-        "reference": "TdR Image 8, p.26 (NASA Planetary Systems)",
+        "distribution": "Bootstrap of real microlensing planets",
+        "formula": "a ~ resample(274 microlensing-discovered planets) x 10^N(0, 0.05 dex); median 2.37 AU (1.15e-5 pc)",
+        "reference": "NASA Exoplanet Archive, ps table, discoverymethod = 'Microlensing'",
         "explanation": (
-            "The planet's orbital semi-major axis controls its angular "
-            "separation from the host star. NASA Planetary Systems data "
-            "shows a bimodal distribution: a dominant peak for close-in "
-            "orbits (~1e-7 to 1e-6 pc) and a secondary bump for wider orbits "
-            "(~1e-5 pc), with a long tail beyond."
+            "The planet's orbital semi-major axis controls its separation "
+            "from the host star in Einstein radii, d = a / r_E, and with it "
+            "the caustic structure of the binary lens. Only planets actually "
+            "DISCOVERED by microlensing are resampled: the archive as a "
+            "whole is dominated by transit and radial-velocity detections, "
+            "whose sensitivity peaks below 1 AU, while microlensing is "
+            "sensitive at 1-10 AU. Using the full archive would import the "
+            "transit selection function and place companions deep inside "
+            "the Einstein ring (d ~ 0.08), where they leave no binary "
+            "signature. The 274 real values are resampled directly (with a "
+            "small 0.05 dex jitter) because no analytic family fits their "
+            "sharply peaked shape."
         ),
     },
     {
@@ -190,7 +198,7 @@ PARAMETER_INFO = [
         "unit": "magnitudes (mag)",
         "applies_to": "All events (I(t) mode only)",
         "distribution": "Scaled Beta distribution",
-        "formula": "Beta(15, 6) scaled to [14, 22], mode ~19.85 mag",
+        "formula": "Beta(15, 6) scaled to [14, 22], mode ~19.89 mag",
         "reference": "TdR Image 10, p.28 (OGLE-IV, Mroz et al. 2019)",
         "explanation": (
             "The apparent I-band brightness of the background source star at "

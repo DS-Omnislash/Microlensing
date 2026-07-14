@@ -25,7 +25,10 @@ const refreshBinaryBtn = document.getElementById("refresh-binary-btn");
 const colCheckboxes = document.querySelectorAll(".col-check");
 const isMagCheckItem = document.getElementById("Is-mag-check-item");
 const isMagCheck = document.getElementById("Is-mag-check");
+const fsBlendCheckItem = document.getElementById("fs-blend-check-item");
+const fsBlendCheck = document.getElementById("fs-blend-check");
 const formatRadios = document.querySelectorAll('input[name="use_magnitudes"]');
+const ogleRadios = document.querySelectorAll('input[name="ogle_noise"]');
 const imperfectionsField = document.getElementById("imperfections-field");
 const colsAllBtn = document.getElementById("cols-all-btn");
 const colsNoneBtn = document.getElementById("cols-none-btn");
@@ -62,47 +65,61 @@ nTotalInput.addEventListener("input", updateSplitPreview);
 updateSplitPreview();
 
 
-// ── Format toggle: A(t) vs I(t) ──────────────────────────────────────────
+// ── Format toggle: A(t) vs I(t), and the mode-dependent columns ───────────
+function setColToggle(item, check, enabled) {
+    check.disabled = !enabled;
+    check.checked = enabled;
+    item.style.opacity = enabled ? "1" : "0.4";
+    item.style.pointerEvents = enabled ? "auto" : "none";
+}
+
 function updateFormatToggle() {
     const useMag = document.querySelector('input[name="use_magnitudes"]:checked').value === "1";
-    if (useMag) {
-        isMagCheck.disabled = false;
-        isMagCheck.checked = true;
-        isMagCheckItem.style.opacity = "1";
-        isMagCheckItem.style.pointerEvents = "auto";
-    } else {
-        isMagCheck.disabled = true;
-        isMagCheck.checked = false;
-        isMagCheckItem.style.opacity = "0.4";
-        isMagCheckItem.style.pointerEvents = "none";
-    }
     if (useMag) {
         imperfectionsField.style.display = "";
     } else {
         imperfectionsField.style.display = "none";
         document.getElementById("imperfections-none").checked = true;
     }
+    const useOgle = useMag &&
+        document.querySelector('input[name="ogle_noise"]:checked')?.value === "ogle";
+
+    // I_s_mag exists only in I(t) mode; f_s_blend only when OGLE blending is applied.
+    setColToggle(isMagCheckItem, isMagCheck, useMag);
+    setColToggle(fsBlendCheckItem, fsBlendCheck, useOgle);
+    updateGenerateEnabled();
 }
 formatRadios.forEach(r => r.addEventListener("change", updateFormatToggle));
+ogleRadios.forEach(r => r.addEventListener("change", updateFormatToggle));
+
+// ── Generate gating: with no output columns there is nothing to generate ──
+function updateGenerateEnabled() {
+    const anyChecked = Array.from(colCheckboxes).some(cb => cb.checked);
+    generateBtn.disabled = !anyChecked;
+    generateBtn.title = anyChecked ? "" : "Select at least one output column first.";
+}
 
 const PRESET_CLASSIFICATION  = new Set(["event_lenses", "__lightcurves__"]);
 const PRESET_SINGLE_LENS     = new Set(["M_star_solar", "D_l_pc", "D_ls_pc", "D_s_pc", "v_perp_kms", "u0", "r_E_m", "t_E_days", "__lightcurves__"]);
 const PRESET_MODEL           = new Set(["__lightcurves__"]);
-const PRESET_DISTRIBUTIONS   = new Set(["event_lenses", "M_star_solar", "D_l_pc", "D_ls_pc", "D_s_pc", "v_perp_kms", "u0", "r_E_m", "t_E_days", "q", "a_pc", "eccentricity", "alpha_ref_rad"]);
+const PRESET_DISTRIBUTIONS   = new Set(["event_lenses", "M_star_solar", "D_l_pc", "D_ls_pc", "D_s_pc", "v_perp_kms", "u0", "r_E_m", "t_E_days", "q", "a_pc", "eccentricity", "alpha_ref_rad", "I_s_mag", "f_s_blend"]);
 
 function applyPreset(preset, name) {
-    colCheckboxes.forEach(cb => { cb.checked = preset.has(cb.value); });
+    // Mode-gated columns (I_s_mag, f_s_blend) stay unchecked while disabled.
+    colCheckboxes.forEach(cb => { cb.checked = preset.has(cb.value) && !cb.disabled; });
     currentPreset = name;
+    updateGenerateEnabled();
 }
 
-colsAllBtn.addEventListener("click", () => { colCheckboxes.forEach(cb => { if (!cb.disabled) cb.checked = true; }); currentPreset = null; });
-colsNoneBtn.addEventListener("click", () => { colCheckboxes.forEach(cb => cb.checked = false); currentPreset = null; });
+colsAllBtn.addEventListener("click", () => { colCheckboxes.forEach(cb => { if (!cb.disabled) cb.checked = true; }); currentPreset = null; updateGenerateEnabled(); });
+colsNoneBtn.addEventListener("click", () => { colCheckboxes.forEach(cb => cb.checked = false); currentPreset = null; updateGenerateEnabled(); });
 document.getElementById("cols-classification-btn").addEventListener("click", () => applyPreset(PRESET_CLASSIFICATION, "Classification"));
 document.getElementById("cols-single-btn").addEventListener("click",         () => applyPreset(PRESET_SINGLE_LENS,    "Single_Lens"));
 document.getElementById("cols-model-btn").addEventListener("click",          () => applyPreset(PRESET_MODEL,          "Model"));
 document.getElementById("cols-distributions-btn").addEventListener("click",  () => applyPreset(PRESET_DISTRIBUTIONS,  "Distributions"));
 
-colCheckboxes.forEach(cb => cb.addEventListener("change", () => { currentPreset = null; }));
+colCheckboxes.forEach(cb => cb.addEventListener("change", () => { currentPreset = null; updateGenerateEnabled(); }));
+updateGenerateEnabled();
 
 function setImage(id, b64) {
     const img = document.getElementById(id);
@@ -124,7 +141,7 @@ function setImage(id, b64) {
 async function runValidation(datasetId, btn, statusEl) {
     btn.disabled = true;
     statusEl.classList.remove("error");
-    statusEl.textContent = "Running validation against TDR_ROC.pdf reference distributions...";
+    statusEl.textContent = "Running validation against TdR_RocRC.pdf reference distributions...";
     validationResults.hidden = true;
 
     try {
@@ -288,6 +305,7 @@ form.addEventListener("submit", async (e) => {
 
     const useMagnitudes = document.querySelector('input[name="use_magnitudes"]:checked').value === "1";
     const ogleNoise = document.querySelector('input[name="ogle_noise"]:checked')?.value === "ogle";
+    const shuffleRows = document.querySelector('input[name="shuffle"]:checked')?.value === "1";
     const payload = {
         n_total: parseInt(nTotalInput.value, 10),
         binary_percent: parseFloat(binaryPercentInput.value),
@@ -296,6 +314,7 @@ form.addEventListener("submit", async (e) => {
         preset: currentPreset || "",
         use_magnitudes: useMagnitudes,
         ogle_noise: ogleNoise,
+        shuffle: shuffleRows,
     };
 
     generateBtn.disabled = true;
@@ -369,7 +388,7 @@ form.addEventListener("submit", async (e) => {
         generateStatus.classList.add("error");
         generateStatus.textContent = `Error: ${err.message}`;
     } finally {
-        generateBtn.disabled = false;
+        updateGenerateEnabled();
     }
 });
 

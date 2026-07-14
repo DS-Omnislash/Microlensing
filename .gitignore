@@ -224,3 +224,6 @@ NOISE_MODEL_NOTES.md
 # (GitHub rejects files over 100 MB). Training scripts and trained models
 # (*.pt) are kept; only the bulky source CSVs are ignored.
 models/**/*.csv
+
+# Local audit report — session artifact, not part of the project
+AUDIT.md

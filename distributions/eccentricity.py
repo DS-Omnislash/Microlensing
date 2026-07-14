@@ -11,7 +11,7 @@ Source: NASA Exoplanet Archive TAP service
         Filtered to default_flag = 1 AND pl_orbeccenerr1 IS NOT NULL.
 
 Color: #2563eb (blue)
-Reference: TDR_ROC.pdf Image 9, p.26-27
+Reference: TdR_RocRC.pdf Image 9, p.26-27
 """
 
 import io

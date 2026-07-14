@@ -45,6 +45,28 @@ def _kde_curve(values, x_range, n_points=300):
     return x, kde(x)
 
 
+def _ks_threshold(n_eff, floor=0.05):
+    """Sample-size-aware acceptance threshold for the KS statistic.
+
+    Every check is judged on the KS STATISTIC (effect size), never the p-value:
+    for an exactly-sampled distribution the p-value is uniform on [0,1], so any
+    p-cut falsely alarms at its own alpha on perfect data, and for large n it
+    collapses to 0 for any negligible real difference. But a FIXED statistic
+    cutoff has the mirror problem: the KS statistic of a perfect sample scales
+    as ~1/sqrt(n), so for small datasets sampling noise alone exceeds the floor.
+
+    This threshold keeps the effect-size floor for large n and raises it to the
+    alpha=0.01 critical value 1.63/sqrt(n_eff) when the sample is small. For
+    two-sample tests pass n_eff = n1*n2/(n1+n2).
+    """
+    return max(floor, 1.63 / np.sqrt(max(float(n_eff), 1.0)))
+
+
+def _n_eff(n1, n2):
+    """Effective sample size of a two-sample KS test."""
+    return n1 * n2 / max(n1 + n2, 1)
+
+
 # ---------------------------------------------------------------------------
 # "Generated data" plots (shown right after generation)
 # ---------------------------------------------------------------------------
@@ -180,33 +202,81 @@ def plot_distributions_binary(data):
     return _fig_to_b64(fig)
 
 
+def _dataset_curves(data, event_indices):
+    """Fetch light curves exactly as they exist in the final dataset ``df``.
+
+    ``event_indices`` are ORIGINAL event indices (0..n_total-1, single-lens
+    events first); ``row_of_event`` maps them to DataFrame rows when the
+    dataset was shuffled. Reading from ``df`` means the samples always show
+    the real product: A(t), clean I(t), or noisy/gapped OGLE I(t).
+    """
+    df = data["df"]
+    time_cols = [c for c in df.columns if c.startswith("t_") and c[2:].isdigit()]
+    time_cols = sorted(time_cols, key=lambda c: int(c[2:]))
+    row_of_event = data.get("row_of_event")
+    if row_of_event is None:
+        rows = [int(i) for i in event_indices]
+    else:
+        rows = [int(row_of_event[int(i)]) for i in event_indices]
+    return df.iloc[rows][time_cols].to_numpy(dtype=np.float64)
+
+
+def _style_curve_axis(ax, tau, y, color, use_mag, ogle, ylabel_amp):
+    """Plot one light curve in the dataset's own format.
+
+    A(t) datasets are drawn as lines; OGLE datasets as photometry-like points
+    (the gaps ARE the data). I(t) axes are inverted so that, magnitudes being
+    brighter when smaller, the peak still points up like A(t).
+    """
+    if ogle:
+        ax.plot(tau, y, ".", ms=3.5, color=color)
+    else:
+        ax.plot(tau, y, "-", lw=1.5, color=color)
+    ax.set_xlabel(r"$\tau = (t-t_0)/t_E$")
+    if use_mag:
+        ax.set_ylabel("I [mag]")
+        ax.invert_yaxis()
+    else:
+        ax.set_ylabel(ylabel_amp)
+        ax.set_ylim(bottom=0.9)
+
+
+def _sample_suptitle(base, use_mag, ogle):
+    if not use_mag:
+        return f"{base} — A(t)"
+    if ogle:
+        return f"{base} — I(t), OGLE imperfections (axis inverted)"
+    return f"{base} — I(t) (axis inverted)"
+
+
 def plot_sample_single_lightcurves(data, seed=42):
-    """A handful of random single-lens light curves."""
+    """A handful of random single-lens light curves, in the dataset's format."""
     n_time = data["n_time"]
     tau = np.linspace(-3, 3, n_time)
     u0_all = data["u0_all"]
     n_single = data["n_single"]
-    single_lc = data["single_lightcurves"]
 
     if n_single == 0:
         return None
 
+    use_mag = bool(data.get("use_magnitudes"))
+    ogle = bool(data.get("ogle_noise"))
+
     fig, axes = plt.subplots(1, 5, figsize=(18, 4), squeeze=False)
-    fig.suptitle("Sample Single-Lens Light Curves", fontsize=15, fontweight="bold")
+    fig.suptitle(_sample_suptitle("Sample Single-Lens Light Curves", use_mag, ogle),
+                 fontsize=15, fontweight="bold")
 
     n_show = min(5, n_single)
     rng_plot = np.random.default_rng(seed)
     single_indices = rng_plot.choice(n_single, size=n_show, replace=False)
+    curves = _dataset_curves(data, single_indices)  # single event i -> row_of_event[i]
 
     for j in range(5):
         ax = axes[0, j]
         if j < len(single_indices):
             idx = single_indices[j]
-            ax.plot(tau, single_lc[idx, :], "b-", lw=1.5)
+            _style_curve_axis(ax, tau, curves[j], "#2563eb", use_mag, ogle, "A(u)")
             ax.set_title(f"Single #{idx}\nu0={u0_all[idx]:.3f}", fontsize=10)
-            ax.set_xlabel(r"$\tau = (t-t_0)/t_E$")
-            ax.set_ylabel("A(u)")
-            ax.set_ylim(bottom=0.9)
         else:
             ax.axis("off")
 
@@ -215,34 +285,39 @@ def plot_sample_single_lightcurves(data, seed=42):
 
 
 def plot_sample_binary_lightcurves(data, seed=42):
-    """A handful of random binary-lens light curves."""
+    """A handful of random binary-lens light curves, in the dataset's format."""
     n_time = data["n_time"]
     tau = np.linspace(-3, 3, n_time)
     n_binary = data["n_binary"]
+    n_single = data["n_single"]
     binary_lc = data["binary_lightcurves"]
 
     if n_binary == 0:
         return None
 
-    fig, axes = plt.subplots(1, 5, figsize=(18, 4), squeeze=False)
-    fig.suptitle("Sample Binary-Lens Light Curves", fontsize=15, fontweight="bold")
+    use_mag = bool(data.get("use_magnitudes"))
+    ogle = bool(data.get("ogle_noise"))
 
-    binary_peaks = binary_lc.max(axis=1)
+    fig, axes = plt.subplots(1, 5, figsize=(18, 4), squeeze=False)
+    fig.suptitle(_sample_suptitle("Sample Binary-Lens Light Curves", use_mag, ogle),
+                 fontsize=15, fontweight="bold")
+
+    binary_peaks = binary_lc.max(axis=1)  # true amplification peak, format-independent
     n_show_b = min(5, n_binary)
     rng_plot = np.random.default_rng(seed)
     binary_interesting = rng_plot.choice(n_binary, size=n_show_b, replace=False)
+    # binary event j is original event n_single + j
+    curves = _dataset_curves(data, [n_single + int(i) for i in binary_interesting])
 
     for j in range(5):
         ax = axes[0, j]
         if j < len(binary_interesting):
             idx = binary_interesting[j]
-            ax.plot(tau, binary_lc[idx, :], "r-", lw=1.5)
+            _style_curve_axis(ax, tau, curves[j], "#dc2626", use_mag, ogle, "A")
             ax.set_title(
                 f"Binary #{idx}\nq={data['q_binary'][idx]:.2e}, A_max={binary_peaks[idx]:.1f}",
                 fontsize=10,
             )
-            ax.set_xlabel(r"$\tau = (t-t_0)/t_E$")
-            ax.set_ylabel("A")
         else:
             ax.axis("off")
 
@@ -253,7 +328,7 @@ def plot_sample_binary_lightcurves(data, seed=42):
 # ---------------------------------------------------------------------------
 # Validation: flexible, works for both generated and uploaded datasets.
 # Only plots parameters that are present in `data`.
-# Page references follow TDR_ROC.pdf physical page numbering (document
+# Page references follow TdR_RocRC.pdf physical page numbering (document
 # starts counting from PDF page 2, so PDF p.N = physical p.(N-1)).
 # ---------------------------------------------------------------------------
 
@@ -377,12 +452,13 @@ def plot_validation_available(data):
             ax.set_title("Impact Parameter u0 [Image 7, p.25]")
             ax.legend()
             ks_stat, ks_p = stats.kstest(u0, "truncexpon", args=(1.0 * 3.0, 0, 1.0 / 3.0))
+            thr_u0 = _ks_threshold(len(u0))
             stats_out.append({
                 "parameter": "Impact Parameter u0",
                 "reference": "TdR Image 7 (p.25): OGLE-IV observational bias, truncated exponential (lambda=3) on [0,1]",
                 "observed": f"KS statistic = {ks_stat:.4f} (p = {ks_p:.3g}), median = {np.median(u0):.3f}",
-                "expected": "Distribution concentrated near 0, decaying toward 1 (not flat/uniform)",
-                "status": "OK" if ks_p > 0.01 else "CHECK",
+                "expected": f"TruncExp(lambda=3) shape (KS stat < {thr_u0:.3f})",
+                "status": "OK" if ks_stat < thr_u0 else "CHECK",
             })
 
         if "is_mag" in panels:
@@ -420,13 +496,13 @@ def plot_validation_available(data):
                 ref_med = float(np.median(Is_ref))
                 # Judge on the KS statistic (effect size): the generated values are
                 # bootstrapped from this very catalogue, so they should match closely.
-                in_range_is = ks_stat_is < 0.05
+                thr_is = _ks_threshold(_n_eff(n_is, len(Is_ref)))
                 stats_out.append({
                     "parameter": "Source Baseline Magnitude I_s (mag)",
                     "reference": f"OGLE-IV event catalogue (blend_model.npz, Is_med), median {ref_med:.2f} mag",
                     "observed": f"KS statistic = {ks_stat_is:.4f} (p = {ks_p_is:.3g}), median = {median_is:.2f} mag",
-                    "expected": f"Bootstrapped from the catalogue (KS stat < 0.05, median ~{ref_med:.2f} mag)",
-                    "status": "OK" if in_range_is else "CHECK",
+                    "expected": f"Bootstrapped from the catalogue (KS stat < {thr_is:.3f}, median ~{ref_med:.2f} mag)",
+                    "status": "OK" if ks_stat_is < thr_is else "CHECK",
                 })
             else:
                 x_is = np.linspace(14, 22, 300)
@@ -443,13 +519,13 @@ def plot_validation_available(data):
                 z_data = np.clip((I_s - 14.0) / 8.0, 0.0, 1.0)
                 ks_stat_is, ks_p_is = stats.kstest(z_data, "beta", args=(15.0, 6.0))
                 median_is = float(np.median(I_s))
-                in_range_is = 19.0 <= median_is <= 20.5
+                thr_is = _ks_threshold(len(I_s))
                 stats_out.append({
                     "parameter": "Source Baseline Magnitude I_s (mag)",
-                    "reference": "TdR Image 10 (p.28): OGLE-IV, Beta(15,6) scaled to [14,22], mode ~19.85 mag",
+                    "reference": "TdR Image 10 (p.28): OGLE-IV, Beta(15,6) scaled to [14,22], mode ~19.89 mag",
                     "observed": f"KS statistic = {ks_stat_is:.4f} (p = {ks_p_is:.3g}), median = {median_is:.2f} mag",
-                    "expected": "Distribution peaking near 19.85 mag, range [14, 22] mag",
-                    "status": "OK" if in_range_is else "CHECK",
+                    "expected": f"Beta(15,6) scaled to [14,22], peak ~19.89 mag (KS stat < {thr_is:.3f})",
+                    "status": "OK" if ks_stat_is < thr_is else "CHECK",
                 })
 
         fig.tight_layout()
@@ -475,18 +551,15 @@ def plot_validation_available(data):
         velocity_img = _fig_to_b64(fig2)
 
         ks_stat_v, ks_p_v = stats.kstest(v_perp, "maxwell", args=(0, mb_scale))
-        # Judge on the KS statistic (effect size), not the p-value -- consistent with
-        # every other check here. For a correctly sampled Maxwell the p-value is
-        # uniform on [0,1], so a p<0.01 rule raises a false alarm ~1% of the time no
-        # matter how good the generator is; and as n grows it collapses to 0 for any
-        # negligible deviation. The statistic measures what actually matters: how far
-        # apart the two cumulative distributions are.
+        # Judged on the KS statistic with the sample-size-aware threshold -- see
+        # _ks_threshold for why neither a p-value rule nor a fixed cutoff works.
+        thr_v = _ks_threshold(len(v_perp))
         stats_out.append({
             "parameter": "Lens Velocity v_perp (km/s)",
             "reference": "TdR p.24 (Rahvar 2015): Maxwell-Boltzmann distribution, mode = 200 km/s",
             "observed": f"KS statistic = {ks_stat_v:.4f} (p = {ks_p_v:.3g}), median = {np.median(v_perp):.1f} km/s",
-            "expected": "Maxwell-Boltzmann shape with mode near 200 km/s (KS stat < 0.05)",
-            "status": "OK" if ks_stat_v < 0.05 else "CHECK",
+            "expected": f"Maxwell-Boltzmann shape with mode near 200 km/s (KS stat < {thr_v:.3f})",
+            "status": "OK" if ks_stat_v < thr_v else "CHECK",
         })
 
     # ── Binary parameters ───────────────────────────────────────────────────
@@ -546,21 +619,22 @@ def plot_validation_available(data):
                 log10_a = np.log10(a_bin)
                 ax.hist(log10_a, bins=40, density=True, alpha=0.6, color="goldenrod",
                         edgecolor="white", label="Data")
-                ax.axvline(-6.4, color="red", ls="--", lw=1.5,
-                           label="Dominant peak ~1e-6.4 pc [Image 8]")
-                ax.axvline(-5.0, color="blue", ls="--", lw=1.5,
-                           label="Secondary bump ~1e-5 pc [Image 8]")
+                ax.axvline(np.log10(2.365 * 4.84814e-6), color="red", ls="--", lw=1.5,
+                           label="Real microlensing median (2.37 AU)")
                 ax.set_xlabel("log10(a) [pc]")
                 ax.set_ylabel("Probability Density")
-                ax.set_title("Semi-major Axis a [Image 8, p.26]")
+                ax.set_title("Semi-major Axis a [NASA Archive, microlensing-discovered]")
                 ax.legend()
                 median_a = float(np.median(a_bin))
-                in_range = -7.5 <= np.log10(median_a) <= -5.0
+                # Microlensing sensitivity peaks at a ~ 1-5 AU;
+                # 1 AU = 10^-5.31 pc, 5 AU = 10^-4.62 pc.
+                in_range = -5.31 <= np.log10(median_a) <= -4.62
                 stats_out.append({
                     "parameter": "Semi-major Axis a (pc)",
-                    "reference": "TdR Image 8 (p.26): bimodal in log-space, dominant peak ~1e-6.4 pc, secondary ~1e-5 pc",
-                    "observed": f"median = {median_a:.2e} pc",
-                    "expected": "median in [10^-7.5, 10^-5] pc",
+                    "reference": "NASA Exoplanet Archive, microlensing-discovered planets only "
+                                 "(n=274), resampled directly (no analytic fit); median 2.37 AU",
+                    "observed": f"median = {median_a:.2e} pc ({median_a / 4.84814e-6:.2f} AU)",
+                    "expected": "median in [10^-5.31, 10^-4.62] pc (1-5 AU)",
                     "status": "OK" if in_range else "CHECK",
                 })
 
@@ -577,12 +651,13 @@ def plot_validation_available(data):
                 ax.set_title("Eccentricity e [Image 9, p.26-27]")
                 ax.legend()
                 ks_stat_e, ks_p_e = stats.kstest(e_bin, "beta", args=(1.5, 12.0))
+                thr_e = _ks_threshold(len(e_bin))
                 stats_out.append({
                     "parameter": "Orbital Eccentricity e",
                     "reference": "TdR Image 9 (p.26-27): exponential-like decay, mode ~0.043, modeled as Beta(1.5, 12)",
                     "observed": f"KS statistic = {ks_stat_e:.4f} (p = {ks_p_e:.3g}), median = {np.median(e_bin):.3f}",
-                    "expected": "Distribution concentrated near 0 with long tail toward 1",
-                    "status": "OK" if ks_p_e > 0.01 else "CHECK",
+                    "expected": f"Beta(1.5, 12) shape, concentrated near 0 (KS stat < {thr_e:.3f})",
+                    "status": "OK" if ks_stat_e < thr_e else "CHECK",
                 })
 
             if "alpha" in binary_panels:
@@ -597,12 +672,13 @@ def plot_validation_available(data):
                 ax.set_title("Trajectory Angle alpha_ref [p.28]")
                 ax.legend()
                 ks_stat_a, ks_p_a = stats.kstest(alpha_bin, "uniform", args=(0, 2 * np.pi))
+                thr_a = _ks_threshold(len(alpha_bin))
                 stats_out.append({
                     "parameter": "Trajectory Angle alpha_ref (rad)",
                     "reference": "TdR p.28: theoretically completely random -> uniform(0, 2*pi)",
                     "observed": f"KS statistic = {ks_stat_a:.4f} (p = {ks_p_a:.3g})",
-                    "expected": "Flat (uniform) distribution over [0, 2*pi]",
-                    "status": "OK" if ks_p_a > 0.01 else "CHECK",
+                    "expected": f"Flat (uniform) over [0, 2*pi] (KS stat < {thr_a:.3f})",
+                    "status": "OK" if ks_stat_a < thr_a else "CHECK",
                 })
 
             fig3.tight_layout()
@@ -684,6 +760,12 @@ def plot_ogle_validation(data):
     base_cols = np.abs(tau) > 2.0
     lc_base   = lc_mat[:, base_cols]
     I_obs_all = lc_base[~np.isnan(lc_base)]
+    if len(I_obs_all) == 0:
+        # Degenerate schedule left no observed wing points; fall back to every
+        # observed point, and bail out cleanly if there are none at all.
+        I_obs_all = lc_mat[obs_mask]
+        if len(I_obs_all) == 0:
+            return None, []
     rng_p     = np.random.default_rng(0)
     n_s       = min(len(I_obs_all), 100_000)
     I_obs     = rng_p.choice(I_obs_all, size=n_s, replace=False)
@@ -718,10 +800,12 @@ def plot_ogle_validation(data):
         rng_p.choice(sigma_gen, size=n_ks_a, replace=True),
         rng_p.choice(sigma_ref, size=n_ks_a, replace=True),
     )
-    # Judge by the KS statistic (effect size), not the p-value: at ~10k samples
-    # the p-value is ~0 for any real distribution pair, so it can never pass.
-    # KS < 0.10 means the CDFs differ by < 10% -- a good distributional match.
-    status_a = "OK" if ks_a < 0.10 else "CHECK"
+    # Judged on the KS statistic with the sample-size-aware threshold (see
+    # _ks_threshold). The floor is 0.10 rather than 0.05 because the compared
+    # populations genuinely differ slightly (near-baseline synthetic points vs
+    # pure baselines); a <10% CDF gap is a good distributional match here.
+    thr_noise = _ks_threshold(_n_eff(n_ks_a, n_ks_a), floor=0.10)
+    status_a = "OK" if ks_a < thr_noise else "CHECK"
     ax1.set_title(
         f"Noise Level Distribution\nKS stat={ks_a:.3f}, p={p_a:.3g}  [{status_a}]",
         fontsize=11,
@@ -766,7 +850,8 @@ def plot_ogle_validation(data):
         ks_fs, p_fs = stats.ks_2samp(
             rng_b.choice(f_s_gen, size=n_fs, replace=True), fs_ref
         )
-        status_fs = "OK" if ks_fs < 0.05 else "CHECK"
+        thr_fs = _ks_threshold(_n_eff(n_fs, len(fs_ref)))
+        status_fs = "OK" if ks_fs < thr_fs else "CHECK"
         ax3.set_title(
             f"Blend Fraction f_s\nKS stat={ks_fs:.3f}  [{status_fs}]  median={np.median(f_s_gen):.3f}",
             fontsize=11,
@@ -778,7 +863,7 @@ def plot_ogle_validation(data):
                 "drawn PAIRED with I_s so their correlation is preserved"
             ),
             "observed": f"KS stat={ks_fs:.4f} vs catalogue, median={float(np.median(f_s_gen)):.3f}",
-            "expected": "Bootstrapped from the catalogue (KS stat < 0.05)",
+            "expected": f"Bootstrapped from the catalogue (KS stat < {thr_fs:.3f})",
             "status": status_fs,
         })
 
@@ -844,7 +929,7 @@ def plot_ogle_validation(data):
                 f"sigma_floor={sig_floor:.5f} mag, sigma_phot0={sig_phot0:.5f} mag at I=18"
             ),
             "observed": f"KS stat={ks_a:.4f} vs OGLE reference, {n_s:,} baseline pts (|tau|>2)",
-            "expected": "Noise level distribution matches OGLE-IV reference (KS stat < 0.10)",
+            "expected": f"Noise level distribution matches OGLE-IV reference (KS stat < {thr_noise:.3f})",
             "status": status_a,
         },
         {

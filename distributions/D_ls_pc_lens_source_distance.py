@@ -9,7 +9,7 @@ Source: NASA Exoplanet Archive TAP service
         Filtered to default models only (ml_modeldef = 1).
 
 Color: darkmagenta
-Reference: TDR_ROC.pdf Image 4, p.22
+Reference: TdR_RocRC.pdf Image 4, p.22
 """
 
 import io

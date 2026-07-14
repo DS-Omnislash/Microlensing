@@ -6,7 +6,7 @@ Source: NASA Exoplanet Archive TAP service
         Filtered to default models only (ml_modeldef = 1).
 
 Color: dodgerblue
-Reference: TDR_ROC.pdf Image 2, p.20
+Reference: TdR_RocRC.pdf Image 2, p.20
 """
 
 import io

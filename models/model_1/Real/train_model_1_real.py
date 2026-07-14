@@ -54,6 +54,7 @@ Outputs (written next to this script)
     model_1_real.pt            trained weights + normalization stats + config
     training_history.png       loss / F1 curves over epochs
     confusion_matrix.png       confusion matrix on the held-out test set
+    training_log.txt           full console output of the run
 
 Run
 ---
@@ -62,6 +63,8 @@ Run
 
 from __future__ import annotations
 
+import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
@@ -93,6 +96,7 @@ HERE = Path(__file__).resolve().parent
 MODEL_OUT = HERE / "model_1_real.pt"
 HISTORY_PLOT = HERE / "training_history.png"
 CONFUSION_PLOT = HERE / "confusion_matrix.png"
+LOG_OUT = HERE / "training_log.txt"
 
 N_POINTS = 400          # light-curve length
 BATCH_SIZE = 256
@@ -105,6 +109,34 @@ PATIENCE = 8            # early-stopping patience (epochs without val-F1 gain)
 SEED = 42
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+class _Tee:
+    """Minimal file-like object that forwards writes to several streams."""
+
+    def __init__(self, *streams) -> None:
+        self._streams = streams
+
+    def write(self, text: str) -> int:
+        for s in self._streams:
+            s.write(text)
+        return len(text)
+
+    def flush(self) -> None:
+        for s in self._streams:
+            s.flush()
+
+
+@contextmanager
+def tee_stdout(path: Path):
+    """Duplicate everything printed inside the block into ``path``."""
+    with path.open("w", encoding="utf-8") as fh:
+        original = sys.stdout
+        sys.stdout = _Tee(original, fh)
+        try:
+            yield
+        finally:
+            sys.stdout = original
 
 
 def find_dataset(folder: Path) -> Path:
@@ -263,7 +295,7 @@ def evaluate(model: nn.Module, loader: DataLoader) -> tuple[float, np.ndarray, n
     return float(np.mean(losses)), np.concatenate(probs), np.concatenate(trues)
 
 
-def main() -> None:
+def run() -> None:
     torch.manual_seed(SEED)
     np.random.seed(SEED)
     print(f"Device: {DEVICE}")
@@ -464,6 +496,12 @@ def main() -> None:
     fig2.tight_layout()
     fig2.savefig(CONFUSION_PLOT, dpi=120)
     print(f"Saved confusion matrix -> {CONFUSION_PLOT.name}")
+
+
+def main() -> None:
+    with tee_stdout(LOG_OUT):
+        run()
+        print(f"Saved training log -> {LOG_OUT.name}")
 
 
 if __name__ == "__main__":

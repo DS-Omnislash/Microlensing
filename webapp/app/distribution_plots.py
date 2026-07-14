@@ -2,7 +2,7 @@
 
 Each curve is built by: (1) sampling 100k points via the exact same functions
 as distributions.py, then (2) applying kernel-density estimation, giving a
-smooth shape that matches the TDR_ROC.pdf histograms without clipping-boundary
+smooth shape that matches the TdR_RocRC.pdf histograms without clipping-boundary
 spikes. Rendered as a filled area in the web minimalistic style.
 """
 

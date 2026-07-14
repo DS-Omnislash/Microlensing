@@ -6,7 +6,7 @@ Source: Mroz et al. (2019), table3.dat — Warsaw Observatory
 
 Two distributions are shown:
   - Grey  : raw observed distribution (biased by telescope detection efficiency)
-  - Blue  : efficiency-corrected real physical distribution (used in TDR_ROC.pdf)
+  - Blue  : efficiency-corrected real physical distribution (used in TdR_RocRC.pdf)
 """
 
 import io

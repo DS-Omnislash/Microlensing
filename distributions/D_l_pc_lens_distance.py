@@ -6,7 +6,7 @@ Source: NASA Exoplanet Archive TAP service
         Filtered to default models only (ml_modeldef = 1).
 
 Color: darkcyan
-Reference: TDR_ROC.pdf Image 5, p.23
+Reference: TdR_RocRC.pdf Image 5, p.23
 """
 
 import io

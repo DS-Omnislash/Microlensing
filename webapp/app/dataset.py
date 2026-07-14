@@ -17,7 +17,7 @@ from .ogle_noise import (
 SEED = 42
 
 
-def generate_dataset(n_total: int, binary_fraction: float, n_time: int, seed: int = SEED, use_magnitudes: bool = False, ogle_noise: bool = False):
+def generate_dataset(n_total: int, binary_fraction: float, n_time: int, seed: int = SEED, use_magnitudes: bool = False, ogle_noise: bool = False, shuffle: bool = False):
     """Generate a synthetic microlensing dataset.
 
     Parameters
@@ -28,10 +28,23 @@ def generate_dataset(n_total: int, binary_fraction: float, n_time: int, seed: in
     seed: RNG seed for reproducibility.
     use_magnitudes: if True, convert A(t) light curves to I-band magnitudes
         using I(t) = I_s - 2.5*log10(A(t)), and add I_s_mag column.
+    ogle_noise: apply OGLE-IV imperfections (blending, noise, cadence gaps).
+        Only meaningful in I(t) mode; the flag is normalised to False when
+        use_magnitudes is False so downstream labels never claim imperfections
+        that were not applied.
+    shuffle: if True, the rows of the returned DataFrame are randomly permuted
+        (reproducibly, from the same seed). By default rows are grouped
+        single-lens first, then binary-lens.
 
     Returns a dict with the assembled DataFrame ``df`` plus the raw
-    per-parameter arrays needed for plotting and validation.
+    per-parameter arrays needed for plotting and validation. The raw arrays
+    always stay in the unshuffled (single-then-binary) order;
+    ``row_of_event[i]`` maps original event index i to its row in ``df``.
     """
+    # Imperfections act on magnitudes; in A(t) mode nothing would be applied,
+    # so normalise the flag rather than storing a claim that is not true.
+    ogle_noise = bool(ogle_noise and use_magnitudes)
+
     rng = np.random.default_rng(seed)
 
     n_binary = int(round(n_total * binary_fraction))
@@ -170,8 +183,22 @@ def generate_dataset(n_total: int, binary_fraction: float, n_time: int, seed: in
     df_lightcurves = pd.DataFrame(all_lightcurves, columns=time_cols, dtype=np.float64)
     df = pd.concat([df_params, df_lightcurves], axis=1)
 
+    # --- Optional row shuffle ---
+    # Only the DataFrame is permuted; the raw per-parameter arrays below keep the
+    # single-then-binary order (they feed order-insensitive histograms/validation).
+    # row_of_event maps an original event index to its row in df, so sample-curve
+    # plots can find a specific event regardless of the ordering.
+    row_of_event = np.arange(n_total, dtype=np.int64)
+    if shuffle and n_total > 1:
+        perm = rng.permutation(n_total)
+        df = df.iloc[perm].reset_index(drop=True)
+        row_of_event = np.empty(n_total, dtype=np.int64)
+        row_of_event[perm] = np.arange(n_total, dtype=np.int64)
+
     return {
         "df": df,
+        "row_of_event": row_of_event,
+        "shuffle": shuffle,
         "n_total": n_total,
         "n_single": n_single,
         "n_binary": n_binary,

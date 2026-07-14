@@ -5,6 +5,7 @@ import uuid
 from collections import OrderedDict
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 # pyrefly: ignore [missing-import]
@@ -32,16 +33,39 @@ N_TOTAL_MIN, N_TOTAL_MAX = 10, 500_000
 N_TIME_MIN, N_TIME_MAX = 50, 1_000
 BINARY_PCT_MIN, BINARY_PCT_MAX = 0.0, 100.0
 
-# Simple in-memory LRU cache of generated datasets.
+# Simple in-memory LRU cache of generated datasets. Eviction is BOTH
+# count-based and size-aware: a request at the configured maximums can weigh
+# several GB, so the cache also enforces a total-bytes budget. The most recent
+# entry is always kept regardless of its size (so maximal requests still work;
+# they just evict everything else).
 MAX_CACHED_DATASETS = 5
+MAX_CACHE_BYTES = 2 * 1024**3  # ~2 GiB across all cached datasets
 _DATASET_CACHE: "OrderedDict[str, dict]" = OrderedDict()
+
+
+def _estimate_entry_bytes(data: dict) -> int:
+    """Approximate memory held by a cache entry (DataFrames + numpy arrays)."""
+    total = 0
+    for value in data.values():
+        if isinstance(value, pd.DataFrame):
+            total += int(value.memory_usage(index=True).sum())
+        elif isinstance(value, np.ndarray):
+            total += int(value.nbytes)
+    return total
 
 
 def _store_dataset(data: dict) -> str:
     dataset_id = uuid.uuid4().hex
+    data["_cache_bytes"] = _estimate_entry_bytes(data)
     _DATASET_CACHE[dataset_id] = data
     _DATASET_CACHE.move_to_end(dataset_id)
-    while len(_DATASET_CACHE) > MAX_CACHED_DATASETS:
+
+    def _total_bytes() -> int:
+        return sum(d.get("_cache_bytes", 0) for d in _DATASET_CACHE.values())
+
+    while len(_DATASET_CACHE) > 1 and (
+        len(_DATASET_CACHE) > MAX_CACHED_DATASETS or _total_bytes() > MAX_CACHE_BYTES
+    ):
         _DATASET_CACHE.popitem(last=False)
     return dataset_id
 
@@ -71,8 +95,10 @@ def _select_columns(df, data: dict):
 
 
 def _build_filename(data: dict, ext: str) -> str:
-    pct_str = f"{data['binary_percent']:g}%"
-    fmt_part = "_I(t)" if data.get("use_magnitudes") else "_A(t)"
+    # Token-safe characters only: "%" and parentheses are not valid unquoted in
+    # a Content-Disposition header and some browsers mangle them.
+    pct_str = f"{data['binary_percent']:g}pct"
+    fmt_part = "_I" if data.get("use_magnitudes") else "_A"
     noise_part = "_OGLE" if data.get("ogle_noise") else ""
     preset_part = f"_{data['preset']}" if data.get("preset") else ""
     return f"Microlensing_Dataset_{data['n_total']}_{pct_str}_{data['n_time']}pts{fmt_part}{noise_part}{preset_part}.{ext}"
@@ -109,10 +135,23 @@ def _data_from_df(df: pd.DataFrame) -> dict:
         if df_col in df.columns:
             data[key] = df[df_col].dropna().to_numpy(dtype=float)
 
-    if "I_s_mag" in df.columns:
+    # (I_s, f_s) must stay PAIRED (they come from the same catalogue event), so
+    # when both columns exist they are extracted with a joint dropna.
+    if "I_s_mag" in df.columns and "f_s_blend" in df.columns:
+        pair = df[["I_s_mag", "f_s_blend"]].dropna()
+        if len(pair) > 0:
+            data["I_s_mag"] = pair["I_s_mag"].to_numpy(dtype=float)
+            data["f_s_blend"] = pair["f_s_blend"].to_numpy(dtype=float)
+    elif "I_s_mag" in df.columns:
         arr = df["I_s_mag"].dropna().to_numpy(dtype=float)
         if len(arr) > 0:
             data["I_s_mag"] = arr
+
+    # Infer whether this dataset carries OGLE imperfections: either it kept its
+    # blend-fraction column, or its light curves contain cadence gaps (NaN).
+    # Without this the four OGLE checks would silently be skipped on re-upload.
+    has_nan_curves = bool(df[time_cols].isna().any().any()) if time_cols else False
+    data["ogle_noise"] = bool("f_s_blend" in df.columns or has_nan_curves)
 
     if n_binary > 0 and "event_lenses" in df.columns:
         binary_mask = df["event_lenses"] == 2
@@ -138,6 +177,7 @@ class GenerateRequest(BaseModel):
     preset: str = Field(default="")
     use_magnitudes: bool = Field(default=False)
     ogle_noise: bool = Field(default=False)
+    shuffle: bool = Field(default=False)
 
 
 @app.get("/")
@@ -170,6 +210,7 @@ def api_generate(req: GenerateRequest):
         n_time=req.n_time,
         use_magnitudes=req.use_magnitudes,
         ogle_noise=req.ogle_noise,
+        shuffle=req.shuffle,
     )
     data["selected_params"] = req.selected_params
     data["binary_percent"] = req.binary_percent
@@ -195,6 +236,9 @@ def api_generate(req: GenerateRequest):
 @app.get("/api/sample-single/{dataset_id}")
 def api_sample_single(dataset_id: str, seed: int = 42):
     data = _get_dataset(dataset_id)
+    # Only datasets generated this session carry the raw arrays the plots need.
+    if "single_lightcurves" not in data:
+        raise HTTPException(status_code=400, detail="Sample plots are only available for datasets generated in this session.")
     plot_b64 = plotting.plot_sample_single_lightcurves(data, seed=seed)
     if plot_b64 is None:
         raise HTTPException(status_code=400, detail="No single-lens events in this dataset")
@@ -204,6 +248,8 @@ def api_sample_single(dataset_id: str, seed: int = 42):
 @app.get("/api/sample-binary/{dataset_id}")
 def api_sample_binary(dataset_id: str, seed: int = 42):
     data = _get_dataset(dataset_id)
+    if "binary_lightcurves" not in data:
+        raise HTTPException(status_code=400, detail="Sample plots are only available for datasets generated in this session.")
     plot_b64 = plotting.plot_sample_binary_lightcurves(data, seed=seed)
     if plot_b64 is None:
         raise HTTPException(status_code=400, detail="No binary-lens events in this dataset")
@@ -411,6 +457,10 @@ def api_model1_download_binaries(dataset_id: str):
 @app.get("/api/download/{dataset_id}")
 def api_download(dataset_id: str):
     data = _get_dataset(dataset_id)
+    # Uploaded / model-run cache entries lack the generation metadata the
+    # filename needs (and the user already has the file).
+    if "df" not in data or "binary_percent" not in data:
+        raise HTTPException(status_code=400, detail="Download is only available for datasets generated in this session.")
     df = _select_columns(data["df"], data)
 
     buf = io.StringIO()
@@ -428,6 +478,8 @@ def api_download(dataset_id: str):
 @app.get("/api/download-pkl/{dataset_id}")
 def api_download_pkl(dataset_id: str):
     data = _get_dataset(dataset_id)
+    if "df" not in data or "binary_percent" not in data:
+        raise HTTPException(status_code=400, detail="Download is only available for datasets generated in this session.")
     df = _select_columns(data["df"], data)
 
     buf = io.BytesIO()

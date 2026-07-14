@@ -2,7 +2,7 @@
 
 A web application for generating synthetic gravitational microlensing light-curve
 datasets, based on the parameter distributions and physical models from
-`TDR_ROC.pdf` (Roc Rubió, "Gravitational Microlensing", pp. 8–29).
+`TdR_RocRC.pdf` (Roc Rubió, "Gravitational Microlensing", pp. 8–29).
 
 Optional OGLE-IV realistic imperfections — **photometric noise, cadence gaps and
 blending** — can be applied to I(t)-mode datasets. Noise and cadence are derived
@@ -26,7 +26,7 @@ Microlensing-1/
 │   │   └── model1.py         Model 1 (Simple) inference wrapper (PyTorch)
 │   ├── static/               CSS and JavaScript
 │   └── templates/            Jinja2 HTML templates
-├── models/                   Trained ML models (Model 1/2/3, each Simple + Real)
+├── models/                   Trained ML models (model_1; model_2/3 are planned placeholders)
 │   └── model_1/
 │       ├── Simple/           Single-vs-binary CNN on PERFECT curves (upper bound)
 │       └── Real/             Same task on noisy / gapped / blended curves
@@ -39,9 +39,9 @@ Microlensing-1/
 │   ├── blend_model.py        Paired (I_s, f_s) blending;   → blend_model.npz/.png
 │   └── ogle_phot_raw.npz     Pooled photometry (7.6 M obs, 89 MB — not tracked in git)
 ├── distributions/            Standalone scripts — one per parameter distribution
-├── notebooks/                Exploratory Jupyter notebooks
+├── data/                     Local caches (ogle_phot_cache)
 ├── requirements.txt
-└── TDR_ROC.pdf               Reference document (parameter distributions, pp. 20–29)
+└── TdR_RocRC.pdf             Reference document (parameter distributions, pp. 20–29)
 ```
 
 ### Two OGLE-IV data products (they are not interchangeable)
@@ -62,6 +62,9 @@ them would preferentially remove the least-blended events and bias the distribut
   matching the reference dataset), and time points per light curve (recommended 400).
 - **Light curve format** — A(t) (dimensionless amplification) or I(t) (I-band
   magnitudes), converted via `I(t) = I_s − 2.5 log₁₀ A(t)`.
+- **Event order** — rows are grouped (all single-lens first, then binary-lens) or,
+  optionally, shuffled reproducibly from the dataset seed, so positional train/test
+  splits keep both classes.
 - **OGLE-IV realistic imperfections** *(I(t) mode only)* — three effects, applied in
   order after magnitude conversion and fully reproducible via the dataset seed:
   1. **Blending** — `I(t) = I_base − 2.5 log₁₀(f_s·A(t) + (1 − f_s))`, where the
@@ -74,19 +77,25 @@ them would preferentially remove the least-blended events and bias the distribut
      unobserved time points become NaN. A minimum of **5 % coverage per curve** is
      guaranteed (see Physics notes).
 - **Distribution logic reference** — each parameter card shows its sampling formula,
-  a KDE curve derived from 100 k sampled points (matching `TDR_ROC.pdf` histograms),
+  a KDE curve derived from 100 k sampled points (matching `TdR_RocRC.pdf` histograms),
   and the literature citation. When OGLE noise is enabled, an additional panel shows
   the noise model, the cadence distribution and the blend fraction applied.
 - **Visualisations** — generated parameter distributions and sample light curves
-  rendered immediately after generation.
+  rendered immediately after generation. Sample curves are shown in the dataset's own
+  format: A(t) datasets as amplification, I(t) datasets as magnitudes with the axis
+  inverted (so the peak still points up), and OGLE datasets as photometry-like points
+  whose gaps are the cadence.
 - **Validate dataset** — 14 goodness-of-fit checks. Every physical parameter is
   compared against its reference distribution; when OGLE imperfections were applied,
   four more are added: the σ(I) noise level, the cadence coverage fraction, the blend
   fraction `f_s`, and an **independent baseline cross-check** (see below).
 - **Upload & validate** — upload an existing `.csv` or `.pkl` dataset for the same
-  validation pipeline.
-- **Download** — export as CSV or Pickle (`.pkl`). Filenames include `_OGLE` when
-  imperfections were applied.
+  validation pipeline. OGLE-mode datasets are recognised automatically (by their
+  `f_s_blend` column or the NaN cadence gaps in their curves), so a downloaded dataset
+  keeps its four OGLE checks when re-uploaded.
+- **Download** — export as CSV or Pickle (`.pkl`). Filenames encode the request, e.g.
+  `Microlensing_Dataset_1000_5pct_400pts_I_OGLE.csv` (`_A`/`_I` for the format, `_OGLE`
+  when imperfections were applied).
 - **Model 1 — single vs. binary classifier** — a trained 1D CNN (PyTorch) predicting,
   per event, whether a light curve is single- or binary-lens. Classify the dataset you
   just generated with one click, or upload a *model dataset*. Returns a per-event
@@ -101,13 +110,21 @@ p-value threshold could never be passed no matter how good the generator is. Wha
 matters is whether a difference is *large enough to matter* — which is what the
 statistic measures.
 
+The acceptance threshold is **sample-size-aware**: `KS < max(0.05, 1.63/√n_eff)`
+(for two-sample tests, `n_eff = n₁n₂/(n₁+n₂)`). A fixed cutoff alone has the mirror
+problem of the p-value: the KS statistic of a perfectly sampled dataset scales as
+~1/√n, so for small datasets sampling noise exceeds 0.05 and a fixed rule would cry
+wolf. The 1.63/√n term is the α = 0.01 critical value of the KS statistic, so small
+datasets are judged fairly while large ones still face the 0.05 effect-size floor.
+
 The **observed-baseline cross-check** is the most valuable of the fourteen. Every other
 check compares generated data against the distribution it was *drawn from* — passing
 proves the sampling is faithful, not that the model is right. This one compares a
 **prediction** against data never used to build it: `I_base = I_s + 2.5 log₁₀ f_s` is
 derived from the *fitted catalogue*, while the reference is measured from the *raw
-photometry*. Nothing forces them to agree. They match to **0.03 mag** across the whole
-distribution (catalogue-implied 18.86 vs photometry-measured 18.94).
+photometry*. Nothing forces them to agree. They match to **0.08 mag** across the whole
+distribution (catalogue-implied 18.86 vs photometry-measured 18.94), with a 0.30 mag
+acceptance threshold.
 
 ## Models
 
@@ -186,8 +203,16 @@ startup rather than crashing.
 
 - **Single-lens** light curves use the Paczyński (1986) point-source point-lens
   amplification formula.
-- **Binary-lens** light curves use the Jacobian inverse ray-shooting method.
-  Large datasets with a high binary-lens fraction will take longer to generate.
+- **Binary-lens** light curves are solved in the **image plane** (Witt & Mao 1995):
+  the binary lens equation is recast as a 5th-order complex polynomial whose roots are
+  the image positions, and the magnification is `A = Σ 1/|det J|` over the 3 or 5 true
+  images. In the limit q → 0 this reproduces Paczyński to ~1e-7. The solve costs
+  ~13 ms per 400-point event, so datasets with a high binary-lens fraction take longer
+  to generate.
+- **Mass ratio `q`** is `m_p / m_star`, the ratio of the two bodies' fractional masses
+  `m_i = M_i/(M_p + M_star)` — equivalently `M_planet/M_star`, the same quantity the
+  extraction script measures from the NASA Exoplanet Archive. It is used directly as
+  the companion mass in units of the primary.
 - **`t_E`** is not sampled directly; it is derived as `r_E / v_perp`, where the
   Einstein radius `r_E` follows from lens mass and the three distances.
 - **Blending — `(I_s, f_s)` are drawn as a PAIR**, by bootstrap-resampling whole rows of
@@ -215,12 +240,11 @@ startup rather than crashing.
   over: heavily-monitored events would count thousands of times while sparsely-observed
   ones barely count, and the ~9 % of points that are magnified drag the distribution
   bright. The two methods differ by 0.23 mag (18.71 pooled vs **18.94** per-event).
-- **Binary morphology note** — generated binary curves systematically show double
-  caustic crossings because sampled parameters land in the resonant topology regime
-  (large diamond caustic). Real OGLE-IV binary detections are biased toward small
-  planetary perturbations (the alert system favours single-lens-like curves), so they
-  rarely show pronounced double peaks. The generator is physically correct; it does
-  not replicate the OGLE detection selection function.
+- **Companion geometry** — with the microlensing-only semi-major-axis distribution,
+  the projected separation d = a/r_E has median ≈ 1.2 and ~56 % of binary events fall
+  in the caustic-rich 0.5 < d < 2 range, exactly where real microlensing-discovered
+  planets sit. The generator does not replicate the OGLE detection selection function
+  (no alert-pipeline bias is applied to which binaries are "found").
 
 ## Limits
 
@@ -230,5 +254,7 @@ startup rather than crashing.
 | Time points per curve | 50 | 1 000 |
 | Binary-lens fraction | 0 % | 100 % |
 
-Generated datasets are kept in an in-memory LRU cache (5 most recent) so Validate
-and Download can reuse the same data without regenerating it.
+Generated datasets are kept in an in-memory LRU cache so Validate and Download can
+reuse the same data without regenerating it. Eviction is both count-based (5 most
+recent) and size-aware (~2 GiB total budget); the most recent dataset is always kept,
+so maximal requests still work — they just evict the older entries.

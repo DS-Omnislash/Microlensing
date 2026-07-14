@@ -14,7 +14,7 @@
         <div class="header-inner">
             <span class="header-eyebrow">Gravitational Microlensing</span>
             <h1>Synthetic Dataset Generator</h1>
-            <p>Single-lens (Paczyński) and binary-lens (Jacobian ray-shooting) light curves sampled from empirical distributions — <em>TDR_ROC.pdf</em>, Roc Rubió.</p>
+            <p>Single-lens (Paczyński) and binary-lens (image-plane solution, Witt &amp; Mao 1995) light curves sampled from empirical distributions — <em>TdR_RocRC.pdf</em>, Roc Rubió.</p>
         </div>
     </header>
 
@@ -83,6 +83,21 @@
                         </label>
                     </div>
                     <p class="hint">Adds realistic OGLE-IV imperfections: photometric noise &sigma;(I) and cadence gaps drawn from 3000 EWS event light curves. Unobserved time points become NaN. Only available in I(t) mode.</p>
+                </div>
+
+                <div class="field">
+                    <label>Event order</label>
+                    <div class="radio-row">
+                        <label class="radio-item">
+                            <input type="radio" name="shuffle" value="0" id="order-grouped" checked>
+                            <span>Grouped &mdash; single-lens rows first, then binary-lens</span>
+                        </label>
+                        <label class="radio-item">
+                            <input type="radio" name="shuffle" value="1" id="order-shuffled">
+                            <span>Shuffled &mdash; events in random order</span>
+                        </label>
+                    </div>
+                    <p class="hint">Grouped keeps the historical layout (all single-lens events before the binary-lens ones). Shuffled randomly permutes the rows (reproducibly from the dataset seed) so positional train/test splits keep both classes.</p>
                 </div>
 
                 <div class="field">
@@ -160,6 +175,10 @@
                             <input type="checkbox" class="col-check" value="I_s_mag" id="Is-mag-check" disabled>
                             <span>Source baseline magnitude <code class="col-code">I_s_mag</code></span>
                         </label>
+                        <label class="checkbox-item" id="fs-blend-check-item" style="opacity:0.4;pointer-events:none;">
+                            <input type="checkbox" class="col-check" value="f_s_blend" id="fs-blend-check" disabled>
+                            <span>Blend fraction <code class="col-code">f_s_blend</code></span>
+                        </label>
                         <label class="checkbox-item checkbox-item--curves">
                             <input type="checkbox" class="col-check" value="__lightcurves__" checked>
                             <span>Light curve series <code class="col-code">t_000 … t_n</code></span>
@@ -229,7 +248,7 @@
 
         <section class="card" id="validation-section">
             <h2>Validation</h2>
-            <p class="section-desc">Compare parameter distributions against TDR_ROC.pdf reference shapes (pp. 20–28). Validate a recently generated dataset or upload an existing one.</p>
+            <p class="section-desc">Compare parameter distributions against TdR_RocRC.pdf reference shapes (pp. 20–28). Validate a recently generated dataset or upload an existing one.</p>
 
             <div class="validation-modes">
                 <div class="validation-mode">
@@ -300,7 +319,7 @@
 
         <section class="card">
             <h2>Distribution logic</h2>
-            <p class="section-desc">Each parameter is sampled independently from the distribution shown, derived from <em>TDR_ROC.pdf</em> (pp. 20–29).</p>
+            <p class="section-desc">Each parameter is sampled independently from the distribution shown, derived from <em>TdR_RocRC.pdf</em> (pp. 20–29).</p>
             <div class="param-grid">
                 {% for p in parameter_info %}
                 <div class="param-card">
@@ -375,7 +394,7 @@
     </main>
 
     <footer>
-        <p>Based on <code>Dataset1generator.ipynb</code> &mdash; Roc Rubió, 2026</p>
+        <p>Roc Rubió &mdash; <em>TdR_RocRC.pdf</em>, "Gravitational Microlensing", 2026</p>
     </footer>
 
     <script type="application/json" id="dist-plots-data">{{ distribution_plots_json | safe }}</script>
