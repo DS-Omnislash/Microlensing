@@ -69,7 +69,8 @@ Run
 
 from __future__ import annotations
 
-import json
+import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
@@ -102,18 +103,66 @@ CSV_PATH = HERE / "Microlensing_Dataset_100000_15pct_400pts_I_Classification.csv
 MODEL_OUT = HERE / "model_1_simple.pt"
 HISTORY_PLOT = HERE / "training_history.png"
 CONFUSION_PLOT = HERE / "confusion_matrix.png"
+LOG_PATH = HERE / "training_log.txt"    # full console transcript of the run
 
 N_POINTS = 400          # light-curve length
 BATCH_SIZE = 256
-EPOCHS = 40
+EPOCHS = 60             # upper bound; early stopping usually ends it sooner
 LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-4
+LR_FACTOR = 0.5         # multiply LR by this when val AUC plateaus
+LR_PATIENCE = 4         # epochs without val-AUC gain before dropping LR
 TEST_SIZE = 0.15        # held-out test fraction
 VAL_SIZE = 0.15         # validation fraction (of the remaining train pool)
-PATIENCE = 8            # early-stopping patience (epochs without val-F1 gain)
+PATIENCE = 12           # early-stopping patience (epochs without val-AUC gain)
 SEED = 42
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+# --------------------------------------------------------------------------- #
+# Console transcript
+# --------------------------------------------------------------------------- #
+class _Tee:
+    """A stdout proxy that writes to the terminal AND a log file at once.
+
+    Every print() during the run therefore lands in training_log.txt as well,
+    so the full details (metrics, threshold, detection-efficiency table) can be
+    reviewed later without re-running. Flushes on every write so a killed run
+    still leaves a readable partial log.
+    """
+
+    def __init__(self, stream, file_handle) -> None:
+        self._stream = stream
+        self._file = file_handle
+
+    def write(self, data: str) -> int:
+        self._stream.write(data)
+        self._file.write(data)
+        self._stream.flush()
+        self._file.flush()
+        return len(data)
+
+    def flush(self) -> None:
+        self._stream.flush()
+        self._file.flush()
+
+
+@contextmanager
+def tee_output(log_path: Path):
+    """Mirror stdout AND stderr into ``log_path`` for the duration.
+
+    stderr is included so a crash traceback (or a library warning) lands in the
+    log too -- that is exactly the moment the transcript is most useful.
+    """
+    with open(log_path, "w", encoding="utf-8") as fh:
+        orig_out, orig_err = sys.stdout, sys.stderr
+        sys.stdout = _Tee(orig_out, fh)
+        sys.stderr = _Tee(orig_err, fh)
+        try:
+            yield
+        finally:
+            sys.stdout, sys.stderr = orig_out, orig_err
 
 
 # --------------------------------------------------------------------------- #
@@ -204,6 +253,9 @@ class LightCurveCNN(nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
+        # Conv trunk only -- pooling is done in forward() so we can take BOTH the
+        # global average AND the global max. The two intermediate pools are MAX
+        # (not avg), so a sharp caustic spike survives the 400->100 downsampling.
         self.features = nn.Sequential(
             nn.Conv1d(2, 32, kernel_size=7, padding=3),   # 2 channels: mag + residual
             nn.BatchNorm1d(32),
@@ -218,11 +270,26 @@ class LightCurveCNN(nn.Module):
             nn.Conv1d(64, 128, kernel_size=3, padding=1),
             nn.BatchNorm1d(128),
             nn.ReLU(inplace=True),
-            nn.AdaptiveAvgPool1d(1),               # global average pool -> 128
         )
+        # Global average + global max, concatenated -> 256 features. Average pool
+        # alone (the previous head) diluted a localized anomaly over all 100
+        # positions -- a few-point caustic spike contributed ~1/100 of the pooled
+        # value and was effectively erased, which is why faint (1e-4..1e-3 mag)
+        # anomalies were missed. Max pooling keeps the height of the sharpest
+        # deviation regardless of WHERE on the curve it falls; average pooling
+        # still captures broad, smooth perturbations. Together they push the
+        # detection floor to fainter anomalies. (This does NOT revive the
+        # float-dust shortcut: a single lens has an exactly-zero residual channel,
+        # so its features are position-constant and max == avg; batch-norm scales
+        # the residual channels by the batch std set by real O(0.1) anomalies, so a
+        # ~1e-7 mag numerical wiggle stays ~1e-6 and cannot be thresholded apart
+        # from a true single lens without also firing on it. Verify via the
+        # detection-efficiency report: the < 1e-5 mag bin must stay near recall 0.)
+        self.avg_pool = nn.AdaptiveAvgPool1d(1)
+        self.max_pool = nn.AdaptiveMaxPool1d(1)
         self.classifier = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(128, 64),
+            nn.Linear(256, 64),                    # 128 avg + 128 max
             nn.ReLU(inplace=True),
             nn.Dropout(0.3),
             nn.Linear(64, 1),                      # single logit
@@ -230,7 +297,8 @@ class LightCurveCNN(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (B, 2, 400)
-        x = self.features(x)
+        x = self.features(x)                       # (B, 128, 100)
+        x = torch.cat([self.avg_pool(x), self.max_pool(x)], dim=1)  # (B, 256, 1)
         return self.classifier(x).squeeze(1)       # (B,)
 
 
@@ -353,10 +421,22 @@ def main() -> None:
     optimizer = torch.optim.Adam(
         model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
     )
+    # Drop the LR when val AUC stops improving so the model can settle into a
+    # finer minimum and crack the fainter anomalies instead of thrashing at a
+    # fixed step size (the previous run's val metric oscillated badly).
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="max", factor=LR_FACTOR, patience=LR_PATIENCE
+    )
 
     # ---- training loop with early stopping -------------------------------- #
+    # Selection & early stopping track val AUC, not F1-at-0.50. AUC is
+    # threshold-independent -- it measures how well the model RANKS binaries above
+    # singles across every cut-off, which is exactly "how faint an anomaly can it
+    # still separate". F1-at-0.50 was a noisy target (pos_weight shifts the
+    # probabilities, so a fixed 0.50 cut jumps around epoch to epoch); the actual
+    # decision threshold is chosen once, later, on the validation set.
     history = {"train_loss": [], "val_loss": [], "val_f1": [], "val_auc": []}
-    best_val_f1 = -1.0
+    best_val_auc = -1.0
     best_state = None
     epochs_no_improve = 0
 
@@ -376,6 +456,7 @@ def main() -> None:
         val_pred = (val_probs >= 0.5).astype(int)
         val_f1 = f1_score(val_true, val_pred, zero_division=0)
         val_auc = roc_auc_score(val_true, val_probs)
+        scheduler.step(val_auc)
 
         history["train_loss"].append(train_loss)
         history["val_loss"].append(val_loss)
@@ -385,17 +466,18 @@ def main() -> None:
         print(
             f"Epoch {epoch:02d}/{EPOCHS}  "
             f"train_loss={train_loss:.4f}  val_loss={val_loss:.4f}  "
-            f"val_F1={val_f1:.4f}  val_AUC={val_auc:.4f}"
+            f"val_F1={val_f1:.4f}  val_AUC={val_auc:.4f}  "
+            f"lr={optimizer.param_groups[0]['lr']:.1e}"
         )
 
-        if val_f1 > best_val_f1:
-            best_val_f1 = val_f1
+        if val_auc > best_val_auc:
+            best_val_auc = val_auc
             best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
             epochs_no_improve = 0
         else:
             epochs_no_improve += 1
             if epochs_no_improve >= PATIENCE:
-                print(f"Early stopping at epoch {epoch} (best val_F1={best_val_f1:.4f})")
+                print(f"Early stopping at epoch {epoch} (best val_AUC={best_val_auc:.4f})")
                 break
 
     # ---- restore best & pick the decision threshold ------------------------ #
@@ -511,7 +593,19 @@ def main() -> None:
     fig2.tight_layout()
     fig2.savefig(CONFUSION_PLOT, dpi=120)
     print(f"Saved confusion matrix -> {CONFUSION_PLOT.name}")
+    print(f"Saved run transcript -> {LOG_PATH.name}")
 
 
 if __name__ == "__main__":
-    main()
+    # Mirror the whole run's console output into training_log.txt. On a crash the
+    # traceback is printed INSIDE the context (before stderr is restored) so it
+    # lands in the log too; we then exit non-zero without re-raising, which would
+    # otherwise print the same traceback a second time to the terminal.
+    import traceback
+
+    with tee_output(LOG_PATH):
+        try:
+            main()
+        except BaseException:
+            traceback.print_exc()
+            sys.exit(1)

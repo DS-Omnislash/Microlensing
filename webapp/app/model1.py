@@ -60,11 +60,14 @@ class LightCurveCNN(nn.Module):
             nn.Conv1d(64, 128, kernel_size=3, padding=1),
             nn.BatchNorm1d(128),
             nn.ReLU(inplace=True),
-            nn.AdaptiveAvgPool1d(1),
         )
+        # Concatenated global average + global max pooling (256 features): max
+        # preserves a localized caustic spike that average pooling would dilute.
+        self.avg_pool = nn.AdaptiveAvgPool1d(1)
+        self.max_pool = nn.AdaptiveMaxPool1d(1)
         self.classifier = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(128, 64),
+            nn.Linear(256, 64),                    # 128 avg + 128 max
             nn.ReLU(inplace=True),
             nn.Dropout(0.3),
             nn.Linear(64, 1),
@@ -73,6 +76,7 @@ class LightCurveCNN(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (B, 2, 400)
         x = self.features(x)
+        x = torch.cat([self.avg_pool(x), self.max_pool(x)], dim=1)
         return self.classifier(x).squeeze(1)
 
 
