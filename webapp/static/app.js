@@ -511,6 +511,102 @@ model1ClassifyBtn.addEventListener("click", async () => {
     }
 });
 
+// ── Model 1 (Real) — two-stage classification of noisy / gapped curves ────
+const m1rFile = document.getElementById("model1real-file");
+const m1rFilename = document.getElementById("model1real-filename");
+const m1rBtn = document.getElementById("model1real-classify-btn");
+const m1rStatus = document.getElementById("model1real-status");
+const m1rResults = document.getElementById("model1real-results");
+const m1rSummary = document.getElementById("model1real-summary");
+const m1rWithProb = document.getElementById("model1real-with-prob");
+const m1rLinks = {
+    predGeneral: document.getElementById("m1r-dl-pred-general"),
+    binGeneral: document.getElementById("m1r-dl-bin-general"),
+    predStrict: document.getElementById("m1r-dl-pred-strict"),
+    binStrict: document.getElementById("m1r-dl-bin-strict"),
+    cascade: document.getElementById("m1r-dl-cascade"),
+};
+
+let m1rDatasetId = null;
+let m1rCounts = { general: 0, strict: 0 };
+
+// Rebuild every download URL: the probability column is a query flag, so the
+// links must follow the checkbox without re-running the model.
+function m1rRefreshLinks() {
+    if (!m1rDatasetId) return;
+    const wp = m1rWithProb.checked ? "true" : "false";
+    const base = "/api/model1-real";
+    m1rLinks.predGeneral.href = `${base}/download-predictions/${m1rDatasetId}?stage=general&with_prob=${wp}`;
+    m1rLinks.binGeneral.href = `${base}/download-binaries/${m1rDatasetId}?stage=general&with_prob=${wp}`;
+    m1rLinks.predStrict.href = `${base}/download-predictions/${m1rDatasetId}?stage=strict&with_prob=${wp}`;
+    m1rLinks.binStrict.href = `${base}/download-binaries/${m1rDatasetId}?stage=strict&with_prob=${wp}`;
+    m1rLinks.cascade.href = `${base}/download-cascade/${m1rDatasetId}?with_prob=${wp}`;
+
+    m1rLinks.binGeneral.classList.toggle("button--disabled", m1rCounts.general === 0);
+    m1rLinks.binStrict.classList.toggle("button--disabled", m1rCounts.strict === 0);
+    m1rLinks.cascade.classList.toggle("button--disabled", m1rCounts.general === 0);
+}
+
+m1rWithProb.addEventListener("change", m1rRefreshLinks);
+
+m1rFile.addEventListener("change", () => {
+    const file = m1rFile.files[0];
+    m1rFilename.textContent = file ? file.name : "No file selected";
+    m1rBtn.disabled = !file;
+    m1rResults.hidden = true;
+    m1rStatus.classList.remove("error");
+    m1rStatus.textContent = "";
+});
+
+m1rBtn.addEventListener("click", async () => {
+    const file = m1rFile.files[0];
+    if (!file) return;
+
+    m1rBtn.disabled = true;
+    m1rStatus.classList.remove("error");
+    m1rStatus.textContent = "Checking dataset and running the model...";
+    m1rResults.hidden = true;
+
+    try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const resp = await fetch("/api/model1-real/predict", { method: "POST", body: formData });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `Request failed with status ${resp.status}`);
+        }
+        const data = await resp.json();
+        m1rDatasetId = data.dataset_id;
+        m1rCounts = { general: data.n_general_binary, strict: data.n_strict_binary };
+
+        const pctG = data.n_total ? ((100 * data.n_general_binary) / data.n_total).toFixed(1) : "0.0";
+        const pctS = data.n_total ? ((100 * data.n_strict_binary) / data.n_total).toFixed(1) : "0.0";
+        const calNote = data.calibrated
+            ? "Probabilities are Platt-calibrated, so a threshold is a precision target."
+            : "This checkpoint is uncalibrated — probabilities are raw scores, not true probabilities.";
+
+        m1rSummary.innerHTML = `
+            <p>
+                Scored <strong>${data.n_total.toLocaleString()}</strong> events.
+                <strong>General</strong> (P ≥ ${data.general_threshold.toFixed(3)}) flagged
+                <strong>${data.n_general_binary.toLocaleString()}</strong> candidates (${pctG}%).
+                <strong>Strict</strong> (P ≥ ${data.strict_threshold.toFixed(3)}) kept
+                <strong>${data.n_strict_binary.toLocaleString()}</strong> (${pctS}%).
+            </p>
+            <p class="hint">${calNote}</p>
+        `;
+
+        m1rRefreshLinks();
+        m1rResults.hidden = false;
+        m1rStatus.textContent = "Done.";
+    } catch (err) {
+        m1rStatus.classList.add("error");
+        m1rStatus.textContent = `Error: ${err.message}`;
+    } finally {
+        m1rBtn.disabled = false;
+    }
+});
+
 // ── Classify the recently generated dataset with Model 1 ──────────────────
 const genClassifyBtn = document.getElementById("gen-classify-btn");
 const genClassifyStatus = document.getElementById("gen-classify-status");

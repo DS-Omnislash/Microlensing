@@ -1,0 +1,63 @@
+Device: cpu
+Loading dataset: Microlensing_Dataset_250000_15pct_400pts_I_OGLE_Classification.csv
+  events: 250,000  |  single: 212,500  binary: 37,500
+  imbalance ratio (single:binary): 5.7 : 1
+  cadence gaps: 78.0% of all samples are NaN
+  train: 180,625  val: 31,875  test: 37,500
+Model parameters: 52,897
+output bias initialised to base-rate log-odds: -1.735  (base rate 0.150)
+pos_weight (binary): 2.38  (full ratio 5.67 ** 0.5)
+Epoch 01/60  train_loss=0.7370  val_loss=0.5028  val_F1=0.0282  val_AUC=0.5372  lr=1.0e-03
+Epoch 02/60  train_loss=0.7286  val_loss=0.4549  val_F1=0.0352  val_AUC=0.5448  lr=1.0e-03
+Epoch 03/60  train_loss=0.7238  val_loss=0.4851  val_F1=0.0833  val_AUC=0.5478  lr=1.0e-03
+Epoch 04/60  train_loss=0.7179  val_loss=0.4538  val_F1=0.0830  val_AUC=0.5479  lr=1.0e-03
+Epoch 05/60  train_loss=0.7150  val_loss=0.4634  val_F1=0.1014  val_AUC=0.5506  lr=1.0e-03
+Epoch 06/60  train_loss=0.7128  val_loss=0.4596  val_F1=0.0760  val_AUC=0.5475  lr=1.0e-03
+Epoch 07/60  train_loss=0.7113  val_loss=0.4683  val_F1=0.1080  val_AUC=0.5486  lr=1.0e-03
+Epoch 08/60  train_loss=0.7101  val_loss=0.4626  val_F1=0.0949  val_AUC=0.5483  lr=1.0e-03
+Epoch 09/60  train_loss=0.7091  val_loss=0.4708  val_F1=0.1170  val_AUC=0.5459  lr=1.0e-03
+Epoch 10/60  train_loss=0.7087  val_loss=0.4773  val_F1=0.1292  val_AUC=0.5470  lr=5.0e-04
+Epoch 11/60  train_loss=0.7055  val_loss=0.4630  val_F1=0.1041  val_AUC=0.5497  lr=5.0e-04
+Epoch 12/60  train_loss=0.7043  val_loss=0.4599  val_F1=0.1042  val_AUC=0.5488  lr=5.0e-04
+Epoch 13/60  train_loss=0.7021  val_loss=0.4718  val_F1=0.1122  val_AUC=0.5488  lr=5.0e-04
+Epoch 14/60  train_loss=0.7011  val_loss=0.4699  val_F1=0.1247  val_AUC=0.5442  lr=5.0e-04
+Epoch 15/60  train_loss=0.6995  val_loss=0.4692  val_F1=0.1183  val_AUC=0.5478  lr=2.5e-04
+Epoch 16/60  train_loss=0.6952  val_loss=0.4735  val_F1=0.1164  val_AUC=0.5442  lr=2.5e-04
+Epoch 17/60  train_loss=0.6922  val_loss=0.4646  val_F1=0.1155  val_AUC=0.5457  lr=2.5e-04
+Early stopping at epoch 17 (best val_AUC=0.5506)
+
+Platt calibration fitted on validation: P(binary) = sigmoid(0.8627 * logit + -0.9595)
+Thresholds: general=0.500 (fixed), strict=0.744 (lowest reaching validation precision >= 0.95)
+
+==============================================================================
+TEST SET PERFORMANCE (two-stage)
+==============================================================================
+  loss : 0.4615    AUC : 0.5582  (threshold-independent)
+
+  stage outputs:
+  general (candidates)   thr=0.500  flagged=   256  TP=  231  FP=    25  precision=0.902  recall=0.041  F1=0.079
+  strict (catalogue)     thr=0.744  flagged=   178  TP=  174  FP=     4  precision=0.978  recall=0.031  F1=0.060
+
+  cascade: general flagged 256 candidates -> strict keeps 178 of them (identical to the strict stage, as expected for one score)
+
+              precision    recall  f1-score   support
+
+      single     0.8539    0.9999    0.9212     31875
+      binary     0.9775    0.0309    0.0600      5625
+
+    accuracy                         0.8545     37500
+   macro avg     0.9157    0.5154    0.4906     37500
+weighted avg     0.8725    0.8545    0.7920     37500
+
+
+Binary recall vs. cadence coverage (test set, binaries only)
+  observed fraction     n      recall
+  5 .. 10%             736    0.001
+  10 .. 20%           2277    0.014
+  20 .. 40%           2127    0.045
+  > 40%                485    0.095
+
+Saved model -> model_1_real.pt
+Saved history plot -> training_history.png
+Saved confusion matrix -> confusion_matrix.png
+Saved training log -> training_log.txt

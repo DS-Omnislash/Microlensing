@@ -5,102 +5,75 @@ Loading dataset: Microlensing_Dataset_100000_15pct_400pts_I_Classification.csv
   train: 72,250  val: 12,750  test: 15,000
 Model parameters: 52,449
 pos_weight (binary): 5.67
-Epoch 01/60  train_loss=0.8481  val_loss=0.3087  val_F1=0.6416  val_AUC=0.8161  lr=1.0e-03
-Epoch 02/60  train_loss=0.7590  val_loss=0.3496  val_F1=0.7822  val_AUC=0.8975  lr=1.0e-03
-Epoch 03/60  train_loss=0.6973  val_loss=0.2656  val_F1=0.8128  val_AUC=0.9003  lr=1.0e-03
-Epoch 04/60  train_loss=0.6570  val_loss=0.2668  val_F1=0.6805  val_AUC=0.7989  lr=1.0e-03
-Epoch 05/60  train_loss=0.7669  val_loss=0.6297  val_F1=0.5346  val_AUC=0.7686  lr=1.0e-03
-Epoch 06/60  train_loss=0.7438  val_loss=0.4005  val_F1=0.7621  val_AUC=0.8601  lr=1.0e-03
-Epoch 07/60  train_loss=0.6929  val_loss=0.2705  val_F1=0.8496  val_AUC=0.8959  lr=1.0e-03
-Epoch 08/60  train_loss=0.6936  val_loss=0.3176  val_F1=0.7495  val_AUC=0.9018  lr=1.0e-03
-Epoch 09/60  train_loss=0.6214  val_loss=0.3037  val_F1=0.6922  val_AUC=0.8599  lr=1.0e-03
-Epoch 10/60  train_loss=0.5955  val_loss=0.2494  val_F1=0.8005  val_AUC=0.9492  lr=1.0e-03
-Epoch 11/60  train_loss=0.6512  val_loss=0.2542  val_F1=0.8102  val_AUC=0.9483  lr=1.0e-03
-Epoch 12/60  train_loss=0.5990  val_loss=0.2516  val_F1=0.8499  val_AUC=0.9201  lr=1.0e-03
-Epoch 13/60  train_loss=0.5562  val_loss=0.2332  val_F1=0.8541  val_AUC=0.9483  lr=1.0e-03
-Epoch 14/60  train_loss=0.5498  val_loss=0.2875  val_F1=0.7388  val_AUC=0.8661  lr=1.0e-03
-Epoch 15/60  train_loss=0.5186  val_loss=2.1646  val_F1=0.2599  val_AUC=0.9098  lr=5.0e-04
-Epoch 16/60  train_loss=0.4441  val_loss=0.1800  val_F1=0.8890  val_AUC=0.9636  lr=5.0e-04
-Epoch 17/60  train_loss=0.4381  val_loss=0.1818  val_F1=0.8499  val_AUC=0.9496  lr=5.0e-04
-Epoch 18/60  train_loss=0.4892  val_loss=0.2038  val_F1=0.8802  val_AUC=0.9595  lr=5.0e-04
-Epoch 19/60  train_loss=0.4472  val_loss=0.1952  val_F1=0.8595  val_AUC=0.9482  lr=5.0e-04
-Epoch 20/60  train_loss=0.4519  val_loss=0.1501  val_F1=0.9189  val_AUC=0.9663  lr=5.0e-04
-Epoch 21/60  train_loss=0.4496  val_loss=0.1961  val_F1=0.8205  val_AUC=0.9349  lr=5.0e-04
-Epoch 22/60  train_loss=0.4358  val_loss=0.3218  val_F1=0.9093  val_AUC=0.9221  lr=5.0e-04
-Epoch 23/60  train_loss=0.4284  val_loss=0.1508  val_F1=0.8710  val_AUC=0.9640  lr=5.0e-04
-Epoch 24/60  train_loss=0.4109  val_loss=0.2183  val_F1=0.7388  val_AUC=0.9357  lr=5.0e-04
-Epoch 25/60  train_loss=0.4944  val_loss=0.1746  val_F1=0.8763  val_AUC=0.9634  lr=2.5e-04
-Epoch 26/60  train_loss=0.3362  val_loss=0.1493  val_F1=0.8861  val_AUC=0.9567  lr=2.5e-04
-Epoch 27/60  train_loss=0.3460  val_loss=0.1577  val_F1=0.8416  val_AUC=0.9686  lr=2.5e-04
-Epoch 28/60  train_loss=0.3351  val_loss=0.9912  val_F1=0.2838  val_AUC=0.9676  lr=2.5e-04
-Epoch 29/60  train_loss=0.3176  val_loss=0.1049  val_F1=0.9280  val_AUC=0.9798  lr=2.5e-04
-Epoch 30/60  train_loss=0.3336  val_loss=0.1550  val_F1=0.8900  val_AUC=0.9519  lr=2.5e-04
-Epoch 31/60  train_loss=0.3442  val_loss=0.1780  val_F1=0.9474  val_AUC=0.9557  lr=2.5e-04
-Epoch 32/60  train_loss=0.3066  val_loss=0.1403  val_F1=0.9246  val_AUC=0.9721  lr=2.5e-04
-Epoch 33/60  train_loss=0.3157  val_loss=0.1420  val_F1=0.8753  val_AUC=0.9540  lr=2.5e-04
-Epoch 34/60  train_loss=0.4306  val_loss=0.1511  val_F1=0.8489  val_AUC=0.9594  lr=1.3e-04
-Epoch 35/60  train_loss=0.2984  val_loss=0.1204  val_F1=0.9015  val_AUC=0.9747  lr=1.3e-04
-Epoch 36/60  train_loss=0.2658  val_loss=0.1068  val_F1=0.9186  val_AUC=0.9738  lr=1.3e-04
-Epoch 37/60  train_loss=0.2522  val_loss=0.1162  val_F1=0.8973  val_AUC=0.9738  lr=1.3e-04
-Epoch 38/60  train_loss=0.2411  val_loss=0.0939  val_F1=0.9277  val_AUC=0.9772  lr=1.3e-04
-Epoch 39/60  train_loss=0.2446  val_loss=0.0978  val_F1=0.9381  val_AUC=0.9721  lr=6.3e-05
-Epoch 40/60  train_loss=0.2077  val_loss=0.0772  val_F1=0.9526  val_AUC=0.9837  lr=6.3e-05
-Epoch 41/60  train_loss=0.2042  val_loss=0.0784  val_F1=0.9489  val_AUC=0.9742  lr=6.3e-05
-Epoch 42/60  train_loss=0.2104  val_loss=0.0755  val_F1=0.9483  val_AUC=0.9868  lr=6.3e-05
-Epoch 43/60  train_loss=0.2075  val_loss=0.0896  val_F1=0.9569  val_AUC=0.9751  lr=6.3e-05
-Epoch 44/60  train_loss=0.2034  val_loss=0.1038  val_F1=0.9062  val_AUC=0.9620  lr=6.3e-05
-Epoch 45/60  train_loss=0.1922  val_loss=0.0718  val_F1=0.9651  val_AUC=0.9838  lr=6.3e-05
-Epoch 46/60  train_loss=0.1943  val_loss=0.1024  val_F1=0.9093  val_AUC=0.9713  lr=6.3e-05
-Epoch 47/60  train_loss=0.1897  val_loss=0.0666  val_F1=0.9580  val_AUC=0.9852  lr=3.1e-05
-Epoch 48/60  train_loss=0.1786  val_loss=0.1224  val_F1=0.9628  val_AUC=0.9797  lr=3.1e-05
-Epoch 49/60  train_loss=0.1704  val_loss=0.0884  val_F1=0.9566  val_AUC=0.9755  lr=3.1e-05
-Epoch 50/60  train_loss=0.1649  val_loss=0.2244  val_F1=0.9718  val_AUC=0.9766  lr=3.1e-05
-Epoch 51/60  train_loss=0.1739  val_loss=0.3210  val_F1=0.9751  val_AUC=0.9761  lr=3.1e-05
-Epoch 52/60  train_loss=0.1678  val_loss=0.2021  val_F1=0.9693  val_AUC=0.9776  lr=1.6e-05
-Epoch 53/60  train_loss=0.1610  val_loss=0.0652  val_F1=0.9631  val_AUC=0.9872  lr=1.6e-05
-Epoch 54/60  train_loss=0.1566  val_loss=0.1162  val_F1=0.9642  val_AUC=0.9796  lr=1.6e-05
-Epoch 55/60  train_loss=0.1578  val_loss=0.0563  val_F1=0.9665  val_AUC=0.9891  lr=1.6e-05
-Epoch 56/60  train_loss=0.1584  val_loss=0.1224  val_F1=0.9676  val_AUC=0.9804  lr=1.6e-05
-Epoch 57/60  train_loss=0.1533  val_loss=0.1057  val_F1=0.9701  val_AUC=0.9827  lr=1.6e-05
-Epoch 58/60  train_loss=0.1570  val_loss=0.0587  val_F1=0.9665  val_AUC=0.9868  lr=1.6e-05
-Epoch 59/60  train_loss=0.1565  val_loss=0.0834  val_F1=0.9668  val_AUC=0.9819  lr=1.6e-05
-Epoch 60/60  train_loss=0.1539  val_loss=0.0965  val_F1=0.9731  val_AUC=0.9830  lr=7.8e-06
-
-Decision threshold selected on validation: 0.05 (val F1=0.9808; F1 at 0.50 would be 0.9665)
-
-============================================================
-TEST SET PERFORMANCE
-============================================================
-  threshold : 0.05  (chosen on validation)
-  loss      : 0.0548
-  F1        : 0.9858   (at the naive 0.50: 0.9672)
-  AUC       : 0.9934   (threshold-independent)
-
-              precision    recall  f1-score   support
-
-      single     0.9951    1.0000    0.9975     12750
-      binary     1.0000    0.9720    0.9858      2250
-
-    accuracy                         0.9958     15000
-   macro avg     0.9975    0.9860    0.9917     15000
-weighted avg     0.9958    0.9958    0.9958     15000
-
-
-Detection efficiency vs. anomaly amplitude (test set, binaries only)
-  anomaly [mag]        n      recall
-  < 1e-5 (numerical)      29    0.448
-  1e-5 .. 1e-4           165    0.867
-  1e-4 .. 1e-3           378    0.952
-  1e-3 .. 1e-2           608    0.988
-  1e-2 .. 0.1            556    1.000
-  > 0.1 (obvious)        514    1.000
-
-  Zero-parameter baseline ('residual != 0' -> binary): F1 = 1.0000
-  Model:                                               F1 = 0.9858
-  (The baseline is the noiseless ceiling and is physically empty -- it
-   fires on 1e-7 mag rounding dust. The model should NOT match it.)
-
-Saved model -> model_1_simple.pt
-Saved history plot -> training_history.png
-Saved confusion matrix -> confusion_matrix.png
-Saved run transcript -> training_log.txt
+Traceback (most recent call last):
+  File "c:\Users\rocru\Desktop\Microlensing-1\models\model_1\Simple\train_model_1_simple.py", line 608, in <module>
+    main()
+  File "c:\Users\rocru\Desktop\Microlensing-1\models\model_1\Simple\train_model_1_simple.py", line 421, in main
+    optimizer = torch.optim.Adam(
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\optim\adam.py", line 102, in __init__
+    super().__init__(params, defaults)
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\optim\optimizer.py", line 405, in __init__
+    self.add_param_group(cast(dict, param_group))
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\_compile.py", line 47, in inner
+    import torch._dynamo
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\_dynamo\__init__.py", line 13, in <module>
+    from . import (
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\_dynamo\aot_compile.py", line 17, in <module>
+    from torch._dynamo.convert_frame import GraphRuntimeEnv
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\_dynamo\convert_frame.py", line 62, in <module>
+    from torch._dynamo.symbolic_convert import TensorifyState
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\_dynamo\symbolic_convert.py", line 60, in <module>
+    from . import (
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\_dynamo\trace_rules.py", line 60, in <module>
+    from .variables import (
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\_dynamo\variables\__init__.py", line 19, in <module>
+    from .base import VariableTracker
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\_dynamo\variables\base.py", line 1203, in <module>
+    from . import builder
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\_dynamo\variables\builder.py", line 113, in <module>
+    from ..side_effects import SideEffects
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\_dynamo\side_effects.py", line 38, in <module>
+    from torch._dynamo.variables.misc import AutogradFunctionContextVariable
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\_dynamo\variables\misc.py", line 40, in <module>
+    from torch._dynamo.variables.lists import TupleVariable
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\_dynamo\variables\lists.py", line 50, in <module>
+    from .functions import UserFunctionVariable
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\_dynamo\variables\functions.py", line 94, in <module>
+    from torch.distributed.fsdp._fully_shard import _fsdp_param_group
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\distributed\fsdp\__init__.py", line 1, in <module>
+    from ._flat_param import FlatParameter as FlatParameter
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\distributed\fsdp\_flat_param.py", line 33, in <module>
+    from ._fsdp_extensions import (
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\distributed\fsdp\_fsdp_extensions.py", line 8, in <module>
+    from torch.distributed.fsdp._shard_utils import (
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\distributed\fsdp\_shard_utils.py", line 17, in <module>
+    from torch.distributed.tensor import DeviceMesh, DTensor, Replicate, Shard as DShard
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\distributed\tensor\__init__.py", line 4, in <module>
+    import torch.distributed.tensor._ops  # force import all built-in dtensor ops
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\distributed\tensor\_ops\__init__.py", line 2, in <module>
+    from ._conv_ops import *  # noqa: F403
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\distributed\tensor\_ops\_conv_ops.py", line 7, in <module>
+    from torch.distributed.tensor._dtensor_spec import DTensorSpec, TensorMeta
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\distributed\tensor\_dtensor_spec.py", line 10, in <module>
+    from torch.distributed.tensor.placement_types import (
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\distributed\tensor\placement_types.py", line 11, in <module>
+    import torch.distributed._functional_collectives as funcol
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\distributed\_functional_collectives.py", line 849, in <module>
+    torch.library.register_autograd(
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\library.py", line 1259, in register_autograd
+    autograd_kernel = _library.autograd.make_autograd_impl(op, info)
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\_library\autograd.py", line 104, in make_autograd_impl
+    Generated = supports_tensorlist(Generated)
+  File "C:\Users\rocru\Desktop\Microlensing-1\venv\lib\site-packages\torch\_library\autograd.py", line 130, in supports_tensorlist
+    class Metadata:
+  File "C:\Users\rocru\AppData\Local\Programs\Python\Python310\lib\dataclasses.py", line 1184, in dataclass
+    return wrap(cls)
+  File "C:\Users\rocru\AppData\Local\Programs\Python\Python310\lib\dataclasses.py", line 1175, in wrap
+    return _process_class(cls, init, repr, eq, order, unsafe_hash,
+  File "C:\Users\rocru\AppData\Local\Programs\Python\Python310\lib\dataclasses.py", line 1093, in _process_class
+    str(inspect.signature(cls)).replace(' -> None', ''))
+  File "C:\Users\rocru\AppData\Local\Programs\Python\Python310\lib\inspect.py", line 3254, in signature
+    return Signature.from_callable(obj, follow_wrapped=follow_wrapped,
+  File "C:\Users\rocru\AppData\Local\Programs\Python\Python310\lib\inspect.py", line 2998, in from_callable
+    @classmethod
+KeyboardInterrupt

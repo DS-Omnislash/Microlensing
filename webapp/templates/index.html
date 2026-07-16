@@ -391,6 +391,77 @@
                 </div>
             </div>
         </section>
+
+        <section class="card" id="model1real-section">
+            <h2>Model 1 — Single vs. Binary classifier <span class="model-tag">Real</span></h2>
+            <p class="section-desc">The realistic counterpart: it reads <strong>noisy, cadence-gapped, blended</strong> OGLE-like curves. Results are reported at <strong>two stages</strong> — a permissive <em>general</em> candidate list and a clean <em>strict</em> catalogue.</p>
+
+            <div class="model-about">
+                <div class="model-about-col">
+                    <h3 class="validation-mode-title">What this model is</h3>
+                    <p class="hint">
+                        A 1D CNN taking four channels: the magnitude curve, an observed
+                        mask, and the <em>fold residual</em> I(τ)−I(−τ) with its own mask.
+                        A single lens is symmetric in τ, so a binary's signature is exactly
+                        that departure from symmetry — the model is handed it directly.
+                    </p>
+                </div>
+                <div class="model-about-col">
+                    <h3 class="validation-mode-title">Two stages, and why</h3>
+                    <p class="hint">
+                        Scores are <strong>calibrated</strong>, so a probability is real
+                        (0.66 means ≈66% of such events are binary) and a threshold is a
+                        precision target. <strong>General</strong> (P ≥ 0.5) is a permissive
+                        candidate list to hand on for review; <strong>strict</strong> is
+                        chosen for high precision — the clean catalogue.
+                    </p>
+                </div>
+            </div>
+
+            <div class="model-warning">
+                <strong>Honest expectation:</strong> on a realistic planet-heavy population most
+                binaries leave anomalies <em>below the photometric noise</em>, so they are
+                physically undetectable. This model runs near that information ceiling
+                (AUC ≈ 0.55): the strict stage buys precision by giving up completeness.
+                Unlike the Simple model it <strong>accepts cadence gaps</strong> (NaN) as well as
+                clean curves, but still needs only light-curve columns
+                (<code>t_000 … t_399</code>), exactly 400 points.
+            </div>
+
+            <div class="upload-row">
+                <label class="btn-upload" for="model1real-file">Choose file</label>
+                <input type="file" id="model1real-file" accept=".csv,.pkl">
+                <span id="model1real-filename" class="upload-filename">No file selected</span>
+                <button id="model1real-classify-btn" type="button" disabled>Classify events</button>
+            </div>
+            <label class="hint" style="display:block;margin-top:.5rem;">
+                <input type="checkbox" id="model1real-with-prob" checked>
+                Include the calibrated <code>prob_binary</code> column in downloads
+            </label>
+            <div id="model1real-status" class="status"></div>
+
+            <div id="model1real-results" hidden>
+                <div class="model-result-summary" id="model1real-summary"></div>
+
+                <h3 class="validation-mode-title">General stage — candidates (permissive)</h3>
+                <div class="actions">
+                    <a id="m1r-dl-pred-general" class="button" href="#">Download predictions</a>
+                    <a id="m1r-dl-bin-general" class="button" href="#">Download predicted binaries</a>
+                </div>
+
+                <h3 class="validation-mode-title">Strict stage — catalogue (high precision)</h3>
+                <div class="actions">
+                    <a id="m1r-dl-pred-strict" class="button" href="#">Download predictions</a>
+                    <a id="m1r-dl-bin-strict" class="button" href="#">Download predicted binaries</a>
+                </div>
+
+                <h3 class="validation-mode-title">Cascade — strict applied to the general candidates</h3>
+                <p class="hint">The candidate list with each row's strict verdict and probability — the hand-off product for a second-opinion model.</p>
+                <div class="actions">
+                    <a id="m1r-dl-cascade" class="button" href="#">Download cascade predictions</a>
+                </div>
+            </div>
+        </section>
     </main>
 
     <footer>

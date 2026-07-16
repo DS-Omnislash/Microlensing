@@ -454,6 +454,187 @@ def api_model1_download_binaries(dataset_id: str):
     )
 
 
+# --------------------------------------------------------------------------- #
+# Model 1 (Real) -- noisy / gapped OGLE-like curves, two-stage output
+# --------------------------------------------------------------------------- #
+def _import_model1_real():
+    try:
+        from . import model1_real
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="The model runtime (PyTorch) is not installed on the server.",
+        )
+    return model1_real
+
+
+def _store_real_result(store: dict, df, result: dict) -> None:
+    """Attach a Real-model result to a cache entry (shared by both entry points)."""
+    store["model1r_df"] = df
+    store["model1r_prob"] = result["prob_binary"]
+    store["model1r_general_pred"] = result["general_pred"]
+    store["model1r_strict_pred"] = result["strict_pred"]
+    store["model1r_general_threshold"] = result["general_threshold"]
+    store["model1r_strict_threshold"] = result["strict_threshold"]
+    store["model1r_calibrated"] = result["calibrated"]
+
+
+def _real_summary(dataset_id: str, result: dict) -> dict:
+    return {
+        "dataset_id": dataset_id,
+        "n_total": result["n_total"],
+        "n_general_binary": result["n_general_binary"],
+        "n_strict_binary": result["n_strict_binary"],
+        "general_threshold": result["general_threshold"],
+        "strict_threshold": result["strict_threshold"],
+        "calibrated": result["calibrated"],
+    }
+
+
+@app.post("/api/model1-real/predict")
+async def api_model1_real_predict(file: UploadFile = File(...)):
+    """Run Model 1 (Real) on an uploaded model dataset (light curves only).
+
+    Unlike the Simple model this accepts cadence gaps (NaN) as well as clean
+    curves -- the Real model takes an observed-mask channel.
+    """
+    content_bytes = await file.read()
+    fname = (file.filename or "").lower()
+    try:
+        if fname.endswith(".pkl"):
+            df = pd.read_pickle(io.BytesIO(content_bytes))
+        else:
+            df = pd.read_csv(io.StringIO(content_bytes.decode("utf-8", errors="replace")))
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Could not parse file: {exc}")
+
+    if not isinstance(df, pd.DataFrame):
+        raise HTTPException(status_code=422, detail="File does not contain a tabular dataset.")
+
+    model1_real = _import_model1_real()
+    try:
+        result = model1_real.classify_dataframe(df)
+    except model1_real.ModelDatasetError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    store = {"source_filename": file.filename or "dataset"}
+    _store_real_result(store, df, result)
+    return _real_summary(_store_dataset(store), result)
+
+
+@app.post("/api/model1-real/predict-generated/{dataset_id}")
+def api_model1_real_predict_generated(dataset_id: str):
+    """Run Model 1 (Real) on a dataset generated in-app this session."""
+    data = _get_dataset(dataset_id)
+    if "df" not in data:
+        raise HTTPException(status_code=404, detail="No generated dataset for this id.")
+
+    # Trained on I(t) magnitudes; A(t) is a different (sign-flipped) domain.
+    if not data.get("use_magnitudes"):
+        raise HTTPException(
+            status_code=422,
+            detail="The model expects I(t) magnitude light curves. This dataset "
+            "is in A(t) (amplification) mode. Regenerate it in I(t) mode to classify it.",
+        )
+
+    model1_real = _import_model1_real()
+    try:
+        result = model1_real.classify_generated(data["df"])
+    except model1_real.ModelDatasetError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    _store_real_result(data, data["df"], result)
+    return _real_summary(dataset_id, result)
+
+
+def _require_real(dataset_id: str) -> dict:
+    data = _get_dataset(dataset_id)
+    if "model1r_prob" not in data:
+        raise HTTPException(
+            status_code=404, detail="No Model 1 (Real) predictions for this id.")
+    return data
+
+
+def _csv_response(frame, filename: str, float_format: str = "%.6g"):
+    buf = io.StringIO()
+    frame.to_csv(buf, index=False, float_format=float_format)
+    buf.seek(0)
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.get("/api/model1-real/download-predictions/{dataset_id}")
+def api_model1_real_download_predictions(
+    dataset_id: str, stage: str = "general", with_prob: bool = True
+):
+    """Per-event predictions for one stage.
+
+    stage=general -> permissive candidate list (hand-off for review)
+    stage=strict  -> clean, high-confidence catalogue
+    with_prob     -> include the calibrated P(binary) column
+    """
+    data = _require_real(dataset_id)
+    if stage not in ("general", "strict"):
+        raise HTTPException(status_code=422, detail="stage must be 'general' or 'strict'.")
+
+    pred = data[f"model1r_{stage}_pred"]
+    out = pd.DataFrame({
+        "row_index": range(len(pred)),
+        "pred_label": ["binary" if p == 1 else "single" for p in pred],
+    })
+    if with_prob:
+        out["prob_binary"] = data["model1r_prob"]
+    return _csv_response(out, f"predictions_{stage}.csv")
+
+
+@app.get("/api/model1-real/download-binaries/{dataset_id}")
+def api_model1_real_download_binaries(
+    dataset_id: str, stage: str = "general", with_prob: bool = True
+):
+    """Full curves of the events predicted binary at one stage."""
+    data = _require_real(dataset_id)
+    if stage not in ("general", "strict"):
+        raise HTTPException(status_code=422, detail="stage must be 'general' or 'strict'.")
+
+    df = data["model1r_df"]
+    pred = data[f"model1r_{stage}_pred"]
+    out = df.loc[pred == 1].copy()
+    if with_prob:
+        out.insert(0, "prob_binary", np.asarray(data["model1r_prob"])[pred == 1])
+    return _csv_response(out, f"detected_binaries_{stage}.csv", float_format="%.10g")
+
+
+@app.get("/api/model1-real/download-cascade/{dataset_id}")
+def api_model1_real_download_cascade(dataset_id: str, with_prob: bool = True):
+    """The strict stage applied to the GENERAL stage's candidates.
+
+    This is the review product: the candidate list from the general stage, each
+    row carrying the strict stage's verdict and calibrated probability. For a
+    single score the kept set equals the strict stage by construction
+    ({p>=general} AND {p>=strict} == {p>=strict}); it is exported separately so a
+    different second-opinion model can be substituted later without reworking the
+    pipeline or the UI.
+    """
+    data = _require_real(dataset_id)
+    prob = np.asarray(data["model1r_prob"])
+    general_pred = data["model1r_general_pred"]
+    strict_pred = data["model1r_strict_pred"]
+
+    cand = np.where(general_pred == 1)[0]
+    out = pd.DataFrame({
+        "row_index": cand,
+        "general_pred": "binary",
+        "strict_pred": ["binary" if strict_pred[i] == 1 else "single" for i in cand],
+        "kept_by_strict": [bool(strict_pred[i] == 1) for i in cand],
+    })
+    if with_prob:
+        out["prob_binary"] = prob[cand]
+    return _csv_response(out, "predictions_cascade_strict_over_general.csv")
+
+
 @app.get("/api/download/{dataset_id}")
 def api_download(dataset_id: str):
     data = _get_dataset(dataset_id)
