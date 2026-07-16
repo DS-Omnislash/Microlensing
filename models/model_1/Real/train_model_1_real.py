@@ -52,11 +52,15 @@ Training set-up (mirrors the improved Simple model)
 
 Calibration and the two-stage output
 ------------------------------------
-The raw sigmoid is NOT a probability: pos_weight deliberately inflates it. A
-Platt calibrator (fitted on VALIDATION only -- never test, which would leak) maps
-the logit onto true frequencies, so a calibrated 0.66 really does mean "~66% of
-events scoring this are binary". Calibration is monotonic: AUC is unchanged, only
-the meaning of the number.
+The raw sigmoid is NOT a probability: pos_weight deliberately inflates it. An
+ISOTONIC calibrator (fitted on VALIDATION only -- never test, which would leak)
+maps the logit onto true frequencies, so a calibrated 0.66 really does mean "~66%
+of events scoring this are binary". Calibration is monotonic: AUC, and the set of
+events a precision target selects, are unchanged -- only the meaning of the
+number. (Platt was tried first and was measurably under-confident in the sparse
+top tail, where the detections live: a Platt 0.500 held 90.2% binaries. Isotonic
+assumes only monotonicity, so it follows the true shape there. See
+report_calibration, which prints predicted vs actual per band.)
 
 That makes a threshold equal a precision target, and predictions are reported at
 two operating points on the same calibrated score:
@@ -112,7 +116,7 @@ from sklearn.metrics import (
     f1_score,
     roc_auc_score,
 )
-from sklearn.linear_model import LogisticRegression
+from sklearn.isotonic import IsotonicRegression
 from sklearn.model_selection import train_test_split
 # pyrefly: ignore [missing-import]
 from torch.utils.data import DataLoader, Subset, TensorDataset
@@ -335,27 +339,59 @@ def to_masked_channels(X: np.ndarray) -> np.ndarray:
                      resid.astype(np.float32), fold_mask], axis=1)  # (N, 4, 400)
 
 
-def fit_platt(logits: np.ndarray, y: np.ndarray) -> tuple[float, float]:
-    """Fit Platt scaling on VALIDATION logits: P(binary) = sigmoid(a*logit + b).
+def fit_calibrator(logits: np.ndarray, y: np.ndarray) -> dict:
+    """Fit ISOTONIC calibration on VALIDATION logits -> P(binary).
 
-    The raw sigmoid is NOT a probability here -- pos_weight deliberately inflates
-    it, so "0.66" means nothing. Platt scaling re-maps the logit onto true
-    frequencies, so a calibrated 0.66 really is "~66% of events scoring this are
-    binary". It is a monotonic transform, so AUC/ranking are unchanged; only the
-    MEANING of the number changes.
+    The raw sigmoid is NOT a probability: pos_weight inflates it, so "0.66" means
+    nothing. Calibration re-maps the logit onto true frequencies.
 
-    Consequence we rely on below: after calibration a threshold IS a precision
-    target -- cutting at 0.9 keeps events that are ~90% likely to be binary.
+    Isotonic, not Platt. Platt forces a logistic shape; with a weak signal and a
+    15% base rate it fits the crowded bulk near the base rate and extrapolates
+    badly into the sparse top tail -- measured: a Platt-calibrated 0.500 actually
+    contained 90.2% binaries, i.e. wildly under-confident exactly where the
+    detections live. Isotonic is non-parametric: it only assumes the mapping is
+    monotonic, so it can follow the true shape in the tail.
+
+    Still monotonic, so the RANKING (and hence AUC, and the set of events picked
+    by a precision target) is unchanged -- only the meaning of the number.
+
+    Returned as breakpoints so the checkpoint stays a plain dict and inference can
+    reproduce it exactly with np.interp.
     """
-    lr = LogisticRegression(C=1e10, solver="lbfgs")   # ~unregularised
-    lr.fit(logits.reshape(-1, 1), y)
-    return float(lr.coef_[0][0]), float(lr.intercept_[0])
+    iso = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
+    iso.fit(np.asarray(logits, dtype=np.float64), np.asarray(y, dtype=np.float64))
+    return {
+        "type": "isotonic",
+        "x": np.asarray(iso.X_thresholds_, dtype=float).tolist(),
+        "y": np.asarray(iso.y_thresholds_, dtype=float).tolist(),
+    }
 
 
-def apply_platt(logits: np.ndarray, ab: tuple[float, float]) -> np.ndarray:
-    """Map raw logits to calibrated probabilities using fitted Platt (a, b)."""
-    a, b = ab
-    return 1.0 / (1.0 + np.exp(-(a * np.asarray(logits, dtype=np.float64) + b)))
+def apply_calibrator(logits: np.ndarray, cal: dict) -> np.ndarray:
+    """Map raw logits to calibrated probabilities using a fitted calibrator."""
+    z = np.asarray(logits, dtype=np.float64)
+    if cal["type"] == "isotonic":
+        # np.interp reproduces IsotonicRegression.predict (clipped at the ends).
+        return np.interp(z, np.asarray(cal["x"]), np.asarray(cal["y"]))
+    if cal["type"] == "platt":
+        return 1.0 / (1.0 + np.exp(-(cal["a"] * z + cal["b"])))
+    raise ValueError(f"unknown calibration type: {cal['type']}")
+
+
+def report_calibration(p: np.ndarray, y: np.ndarray) -> None:
+    """Reliability check: in each probability band, what fraction is REALLY binary?
+
+    'predicted' and 'actual' should track each other. This is the check that
+    caught Platt being under-confident (predicted 0.5 -> actual 0.90).
+    """
+    print("\nCalibration check (test): predicted vs. actual binary fraction")
+    print("  band            n      predicted   actual")
+    for lo, hi in [(0.0, 0.1), (0.1, 0.3), (0.3, 0.5), (0.5, 0.7),
+                   (0.7, 0.9), (0.9, 1.01)]:
+        sel = (p >= lo) & (p < hi)
+        if sel.sum() >= 20:
+            print(f"  [{lo:.1f},{hi:.1f})  {int(sel.sum()):>7,}      "
+                  f"{p[sel].mean():.3f}      {y[sel].mean():.3f}")
 
 
 def select_strict_threshold(p: np.ndarray, y: np.ndarray, target: float) -> float:
@@ -662,10 +698,10 @@ def run() -> None:
     # CALIBRATED score. Fit on validation only -- never the test set, which would
     # leak and flatter the result.
     _, val_probs, val_true, val_logits = evaluate(model, val_loader)
-    platt = fit_platt(val_logits, val_true)
-    val_cal = apply_platt(val_logits, platt)
-    print(f"\nPlatt calibration fitted on validation: "
-          f"P(binary) = sigmoid({platt[0]:.4f} * logit + {platt[1]:.4f})")
+    calibration = fit_calibrator(val_logits, val_true)
+    val_cal = apply_calibrator(val_logits, calibration)
+    print(f"\nIsotonic calibration fitted on validation "
+          f"({len(calibration['x'])} breakpoints)")
 
     # ---- two operating points, both on the calibrated score ---------------- #
     strict_threshold = select_strict_threshold(val_cal, val_true,
@@ -679,7 +715,7 @@ def run() -> None:
 
     # ---- final test evaluation (test set touched once) --------------------- #
     test_loss, test_probs, test_true, test_logits = evaluate(model, test_loader)
-    test_cal = apply_platt(test_logits, platt)
+    test_cal = apply_calibrator(test_logits, calibration)
     test_auc = roc_auc_score(test_true, test_cal)   # calibration is monotonic: AUC unchanged
 
     print("\n" + "=" * 78)
@@ -705,6 +741,9 @@ def run() -> None:
         target_names=["single", "binary"], digits=4, zero_division=0,
     ))
 
+    # ---- is the reported probability trustworthy? -------------------------- #
+    report_calibration(test_cal, test_true)
+
     # ---- Real-specific diagnostic: does missing data trip the model? ------- #
     report_recall_vs_coverage(test_gap_frac, test_true,
                               (test_cal >= strict_threshold).astype(int))
@@ -718,9 +757,9 @@ def run() -> None:
             "in_channels": IN_CHANNELS,
             "normalization": "per_curve_zscore_masked_fold",
             "label_map": {"single": 0, "binary": 1},
-            # Inference MUST apply the Platt calibration to the raw logit and then
-            # cut at these thresholds -- the raw sigmoid is not a probability.
-            "calibration": {"type": "platt", "a": platt[0], "b": platt[1]},
+            # Inference MUST apply this calibration to the raw logit and then cut
+            # at these thresholds -- the raw sigmoid is not a probability.
+            "calibration": calibration,
             "general_threshold": GENERAL_THRESHOLD,
             "strict_threshold": strict_threshold,
             "strict_precision_target": STRICT_PRECISION_TARGET,

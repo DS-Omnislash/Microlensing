@@ -116,14 +116,14 @@ def _get_model() -> LightCurveCNN:
         # (strict looser than general, so strict is not a subset of general).
         # Fail loudly instead of quietly reporting garbage.
         cal = checkpoint.get("calibration")
-        if not (cal and cal.get("type") == "platt"):
+        if not (cal and cal.get("type") in ("isotonic", "platt")):
             raise ModelDatasetError(
                 "The trained Real model on the server predates the calibrated "
                 "two-stage design (no calibration stored in the checkpoint). "
                 "Retrain with the current models/model_1/Real/train_model_1_real.py "
                 "to produce a checkpoint with calibration and both thresholds."
             )
-        _calibration = (float(cal["a"]), float(cal["b"]))
+        _calibration = cal
         _general_threshold = float(
             checkpoint.get("general_threshold", _FALLBACK_GENERAL))
         _strict_threshold = float(
@@ -224,23 +224,28 @@ def validate_model_dataset(df: pd.DataFrame) -> np.ndarray:
     return _extract_lightcurves(df)
 
 
+def _apply_calibration(logits: np.ndarray) -> np.ndarray:
+    """Mirror of train_model_1_real.apply_calibrator."""
+    cal = _calibration
+    if cal["type"] == "isotonic":
+        # np.interp reproduces IsotonicRegression.predict (clipped at the ends).
+        return np.interp(logits, np.asarray(cal["x"]), np.asarray(cal["y"]))
+    return 1.0 / (1.0 + np.exp(-(cal["a"] * logits + cal["b"])))
+
+
 @torch.no_grad()
 def predict_proba(X: np.ndarray) -> np.ndarray:
     """Calibrated P(binary) per event.
 
-    The raw sigmoid is NOT a probability (pos_weight inflates it); the Platt
-    coefficients stored at training time map the logit onto true frequencies.
+    The raw sigmoid is NOT a probability (pos_weight inflates it); the calibrator
+    fitted at training time maps the logit onto true frequencies.
     """
     model = _get_model()
     probs = []
     for start in range(0, len(X), 1024):
         batch = to_masked_channels(X[start:start + 1024])
         logits = model(torch.from_numpy(batch)).numpy().astype(np.float64)
-        if _calibration is not None:
-            a, b = _calibration
-            probs.append(1.0 / (1.0 + np.exp(-(a * logits + b))))
-        else:
-            probs.append(1.0 / (1.0 + np.exp(-logits)))
+        probs.append(_apply_calibration(logits))
     return np.concatenate(probs)
 
 
