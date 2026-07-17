@@ -230,20 +230,26 @@
                 <img id="plot-sample-binary-lightcurves" class="plot" alt="Sample binary-lens light curves">
             </div>
 
+            <div class="plot-block" id="event-lookup-block">
+                <h3>Look up a specific event</h3>
+                <p class="hint">Enter an event id (its row number in the dataset, the same <code>event_id</code> shown in downloads) to see that one curve and its parameters.</p>
+                <div class="upload-row">
+                    <input type="number" id="event-lookup-input" class="event-input" min="0" step="1" placeholder="e.g. 541">
+                    <button id="event-lookup-btn" type="button">Show event</button>
+                    <span id="event-lookup-hint" class="hint"></span>
+                </div>
+                <div id="event-lookup-status" class="status"></div>
+                <div id="event-lookup-result" hidden>
+                    <img id="event-lookup-plot" class="plot" alt="Selected event light curve">
+                    <div class="info-grid" id="event-lookup-info"></div>
+                </div>
+            </div>
+
             <div class="actions">
                 <a id="download-link" class="button" href="#">Download CSV</a>
                 <a id="download-pkl-link" class="button" href="#">Download PKL</a>
-                <button id="gen-classify-btn" type="button">Classify with Model 1</button>
             </div>
-
-            <div id="gen-model1-results" hidden>
-                <div class="model-result-summary" id="gen-model1-summary"></div>
-                <div class="actions">
-                    <a id="gen-model1-download-predictions" class="button" href="#">Download predictions.csv</a>
-                    <a id="gen-model1-download-binaries" class="button" href="#">Download detected binaries</a>
-                </div>
-            </div>
-            <div id="gen-classify-status" class="status"></div>
+            <p class="hint">To classify this dataset, use the <strong>Model 1</strong> sections below (choose “last generated dataset” as the source).</p>
         </section>
 
         <section class="card" id="validation-section">
@@ -379,14 +385,25 @@
                 <label class="btn-upload" for="model1-file">Choose file</label>
                 <input type="file" id="model1-file" accept=".csv,.pkl">
                 <span id="model1-filename" class="upload-filename">No file selected</span>
-                <button id="model1-classify-btn" type="button" disabled>Classify events</button>
+                <button id="model1-classify-btn" type="button" disabled>Classify uploaded file</button>
+            </div>
+            <div class="upload-row">
+                <span class="or-sep">or</span>
+                <button id="model1-gen-btn" type="button" disabled>Classify last generated dataset</button>
+                <span id="model1-gen-hint" class="hint">Generate a dataset above first.</span>
             </div>
             <div id="model1-status" class="status"></div>
 
             <div id="model1-results" hidden>
                 <div class="model-result-summary" id="model1-summary"></div>
+                <p class="download-note">
+                    <strong>Predictions</strong> lists every event with its verdict; <strong>detected binaries</strong>
+                    is only the flagged events, with their full light curves and <code>event_id</code> (row number)
+                    first. Scoring a <strong>recently generated dataset</strong>? The binaries file also keeps each
+                    event's true <code>event_lenses</code> and parameters for comparison against ground truth.
+                </p>
                 <div class="actions">
-                    <a id="model1-download-predictions" class="button" href="#">Download predictions.csv</a>
+                    <a id="model1-download-predictions" class="button" href="#">Download predictions</a>
                     <a id="model1-download-binaries" class="button" href="#">Download detected binaries</a>
                 </div>
             </div>
@@ -432,7 +449,12 @@
                 <label class="btn-upload" for="model1real-file">Choose file</label>
                 <input type="file" id="model1real-file" accept=".csv,.pkl">
                 <span id="model1real-filename" class="upload-filename">No file selected</span>
-                <button id="model1real-classify-btn" type="button" disabled>Classify events</button>
+                <button id="model1real-classify-btn" type="button" disabled>Classify uploaded file</button>
+            </div>
+            <div class="upload-row">
+                <span class="or-sep">or</span>
+                <button id="model1real-gen-btn" type="button" disabled>Classify last generated dataset</button>
+                <span id="model1real-gen-hint" class="hint">Generate a dataset above first.</span>
             </div>
             <label class="hint" style="display:block;margin-top:.5rem;">
                 <input type="checkbox" id="model1real-with-prob" checked>
@@ -443,22 +465,38 @@
             <div id="model1real-results" hidden>
                 <div class="model-result-summary" id="model1real-summary"></div>
 
-                <h3 class="validation-mode-title">General stage — candidates (permissive)</h3>
-                <div class="actions">
-                    <a id="m1r-dl-pred-general" class="button" href="#">Download predictions</a>
-                    <a id="m1r-dl-bin-general" class="button" href="#">Download predicted binaries</a>
+                <p class="hint download-note">
+                    Every file starts with <code>event_id</code> (the event's row number in the dataset you scored).
+                    <strong>Predictions</strong> = all events with their verdict; <strong>binaries</strong> = only the
+                    flagged events, with their full light curves. Scoring a <strong>recently generated dataset</strong>
+                    keeps each event's true <code>event_lenses</code> and parameters in the binaries file, for
+                    comparison against ground truth.
+                </p>
+
+                <div class="model-stage">
+                    <h3 class="validation-mode-title">General — candidate list</h3>
+                    <p class="hint">Every event more likely binary than not (P ≥ 0.5). A broad net for review or a second model; expect false positives.</p>
+                    <div class="stage-actions">
+                        <a id="m1r-dl-pred-general" class="button" href="#">All events + verdict</a>
+                        <a id="m1r-dl-bin-general" class="button" href="#">Flagged binaries only</a>
+                    </div>
                 </div>
 
-                <h3 class="validation-mode-title">Strict stage — catalogue (high precision)</h3>
-                <div class="actions">
-                    <a id="m1r-dl-pred-strict" class="button" href="#">Download predictions</a>
-                    <a id="m1r-dl-bin-strict" class="button" href="#">Download predicted binaries</a>
+                <div class="model-stage">
+                    <h3 class="validation-mode-title">Strict — clean catalogue</h3>
+                    <p class="hint">Only high-confidence detections (precision ≈ 0.95). Far fewer events, almost no false positives — the trustworthy result.</p>
+                    <div class="stage-actions">
+                        <a id="m1r-dl-pred-strict" class="button" href="#">All events + verdict</a>
+                        <a id="m1r-dl-bin-strict" class="button" href="#">Flagged binaries only</a>
+                    </div>
                 </div>
 
-                <h3 class="validation-mode-title">Cascade — strict applied to the general candidates</h3>
-                <p class="hint">The candidate list with each row's strict verdict and probability — the hand-off product for a second-opinion model.</p>
-                <div class="actions">
-                    <a id="m1r-dl-cascade" class="button" href="#">Download cascade predictions</a>
+                <div class="model-stage">
+                    <h3 class="validation-mode-title">Cascade — candidates, re-judged</h3>
+                    <p class="hint">The general candidates, each carrying the strict verdict and probability — the hand-off product for a second-opinion model.</p>
+                    <div class="stage-actions">
+                        <a id="m1r-dl-cascade" class="button" href="#">Download cascade</a>
+                    </div>
                 </div>
             </div>
         </section>

@@ -1,6 +1,7 @@
 ﻿"""FastAPI application for generating synthetic microlensing datasets."""
 
 import io
+import math
 import uuid
 from collections import OrderedDict
 from pathlib import Path
@@ -256,6 +257,49 @@ def api_sample_binary(dataset_id: str, seed: int = 42):
     return {"plot": plot_b64}
 
 
+@app.get("/api/event/{dataset_id}")
+def api_event(dataset_id: str, index: int):
+    """Plot and describe one specific event by its row number in the dataset."""
+    data = _get_dataset(dataset_id)
+    if "single_lightcurves" not in data or "df" not in data:
+        raise HTTPException(
+            status_code=400,
+            detail="Event lookup is only available for datasets generated in this session.")
+
+    df = data["df"]
+    n_total = len(df)
+    if index < 0 or index >= n_total:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Event {index} is out of range. Valid ids are 0 to {n_total - 1}.")
+
+    plot_b64 = plotting.plot_event(data, index)
+    row = df.iloc[index]
+
+    # Everything but the light-curve columns is the event's information. Cast to
+    # plain Python types, and turn NaN/inf into None: they are valid in a dataset
+    # (e.g. binary-only params like q are NaN for a single lens) but not JSON, and
+    # would otherwise make the response encoder 500.
+    info = {}
+    for col in df.columns:
+        if col.startswith("t_") and str(col)[2:].isdigit():
+            continue
+        val = row[col]
+        val = val.item() if hasattr(val, "item") else val
+        if isinstance(val, float) and not math.isfinite(val):
+            val = None
+        info[col] = val
+
+    is_binary = "event_lenses" in df.columns and int(row["event_lenses"]) == 2
+    return {
+        "plot": plot_b64,
+        "index": index,
+        "n_total": n_total,
+        "label": "binary" if is_binary else "single",
+        "info": info,
+    }
+
+
 @app.post("/api/validate/{dataset_id}")
 def api_validate(dataset_id: str):
     data = _get_dataset(dataset_id)
@@ -442,7 +486,12 @@ def api_model1_download_binaries(dataset_id: str):
 
     df = data["model1_df"]
     pred = data["model1_pred"]
-    binary_df = df.loc[pred == 1]
+    idx = np.where(np.asarray(pred) == 1)[0]      # positions in the original dataset
+    binary_df = df.iloc[idx].copy()
+    # First column is the event id (row number in the original dataset). For a
+    # generated dataset the remaining columns still carry the true event_lenses
+    # label and parameters -> ground truth.
+    binary_df.insert(0, "event_id", idx)
 
     buf = io.StringIO()
     binary_df.to_csv(buf, index=False, float_format="%.10g")
@@ -601,9 +650,14 @@ def api_model1_real_download_binaries(
 
     df = data["model1r_df"]
     pred = data[f"model1r_{stage}_pred"]
-    out = df.loc[pred == 1].copy()
+    idx = np.where(np.asarray(pred) == 1)[0]      # positions in the original dataset
+    out = df.iloc[idx].copy()
+    # First column is the event id (its row number in the original dataset), then
+    # the calibrated probability. For a generated dataset the remaining columns
+    # still carry the true event_lenses label and parameters -> ground truth.
     if with_prob:
-        out.insert(0, "prob_binary", np.asarray(data["model1r_prob"])[pred == 1])
+        out.insert(0, "prob_binary", np.asarray(data["model1r_prob"])[idx])
+    out.insert(0, "event_id", idx)
     return _csv_response(out, f"detected_binaries_{stage}.csv", float_format="%.10g")
 
 

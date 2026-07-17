@@ -249,6 +249,35 @@ def _sample_suptitle(base, use_mag, ogle):
     return f"{base} — I(t) (axis inverted)"
 
 
+def plot_event(data, row_index):
+    """Plot one specific event by its row number in the dataset ``df``.
+
+    ``row_index`` is the event id shown in the downloads (0..n_total-1). Returns
+    a base64 PNG, or None if the index is out of range.
+    """
+    df = data["df"]
+    if row_index < 0 or row_index >= len(df):
+        return None
+
+    time_cols = sorted((c for c in df.columns if c.startswith("t_") and c[2:].isdigit()),
+                       key=lambda c: int(c[2:]))
+    curve = df.iloc[row_index][time_cols].to_numpy(dtype=np.float64)
+    tau = np.linspace(-3, 3, data["n_time"])
+    use_mag = bool(data.get("use_magnitudes"))
+    ogle = bool(data.get("ogle_noise"))
+
+    is_binary = "event_lenses" in df.columns and int(df.iloc[row_index]["event_lenses"]) == 2
+    name = "Binary-lens" if is_binary else "Single-lens"
+    color = "#dc2626" if is_binary else "#2563eb"
+
+    fig, ax = plt.subplots(figsize=(7, 4.2))
+    fig.suptitle(_sample_suptitle(f"Event #{row_index} — {name}", use_mag, ogle),
+                 fontsize=13, fontweight="bold")
+    _style_curve_axis(ax, tau, curve, color, use_mag, ogle, "A")
+    fig.tight_layout()
+    return _fig_to_b64(fig)
+
+
 def plot_sample_single_lightcurves(data, seed=42):
     """A handful of random single-lens light curves, in the dataset's format."""
     n_time = data["n_time"]

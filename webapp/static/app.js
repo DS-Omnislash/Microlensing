@@ -323,8 +323,8 @@ form.addEventListener("submit", async (e) => {
     resultsSection.hidden = true;
     validationResults.hidden = true;
     validateBtn.disabled = true;
-    document.getElementById("gen-model1-results").hidden = true;
-    document.getElementById("gen-classify-status").textContent = "";
+    // Any output that was triggered for the PREVIOUS dataset is now stale.
+    resetTriggeredOutputs();
 
     try {
         const resp = await fetch("/api/generate", {
@@ -342,6 +342,9 @@ form.addEventListener("submit", async (e) => {
         currentDatasetId = data.dataset_id;
         singleSeed = 42;
         binarySeed = 42;
+
+        // A freshly generated dataset can now be fed to either Model 1 section.
+        enableGenClassify(data.n_time === 400);
 
         document.getElementById("results-summary").innerHTML = `
             <p>
@@ -430,6 +433,98 @@ refreshBinaryBtn.addEventListener("click", async () => {
         refreshBinaryBtn.disabled = false;
     }
 });
+
+// ── Look up one specific event by its id ──────────────────────────────────
+const eventLookupInput = document.getElementById("event-lookup-input");
+const eventLookupBtn = document.getElementById("event-lookup-btn");
+const eventLookupStatus = document.getElementById("event-lookup-status");
+const eventLookupResult = document.getElementById("event-lookup-result");
+const eventLookupInfo = document.getElementById("event-lookup-info");
+
+// Pretty-print a parameter value: keep integers whole, round floats.
+function fmtEventValue(v) {
+    if (typeof v !== "number") return String(v);
+    if (Number.isInteger(v)) return v.toLocaleString();
+    const a = Math.abs(v);
+    if (a !== 0 && (a < 1e-3 || a >= 1e5)) return v.toExponential(3);
+    return v.toFixed(4);
+}
+
+async function lookupEvent() {
+    if (!currentDatasetId) {
+        eventLookupStatus.classList.add("error");
+        eventLookupStatus.textContent = "Generate a dataset above first.";
+        return;
+    }
+    const raw = eventLookupInput.value.trim();
+    if (raw === "") return;
+    const index = parseInt(raw, 10);
+
+    eventLookupBtn.disabled = true;
+    eventLookupStatus.classList.remove("error");
+    eventLookupStatus.textContent = "Loading event...";
+    try {
+        const resp = await fetch(`/api/event/${currentDatasetId}?index=${index}`);
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `Request failed with status ${resp.status}`);
+        }
+        const data = await resp.json();
+        setImage("event-lookup-plot", data.plot);
+
+        // event_lenses first (as the true label), then the rest.
+        const entries = Object.entries(data.info);
+        entries.sort((a, b) => (a[0] === "event_lenses" ? -1 : b[0] === "event_lenses" ? 1 : 0));
+        eventLookupInfo.innerHTML = entries.map(([k, v]) => {
+            const label = k === "event_lenses" ? "True label" : k;
+            const val = k === "event_lenses"
+                ? (v === 2 ? "binary (2)" : "single (1)")
+                : fmtEventValue(v);
+            return `<div class="info-cell"><span class="info-label">${label}</span><strong>${val}</strong></div>`;
+        }).join("");
+
+        eventLookupResult.hidden = false;
+        eventLookupStatus.textContent = `Showing event #${data.index} of ${data.n_total.toLocaleString()} (${data.label}).`;
+    } catch (err) {
+        eventLookupResult.hidden = true;
+        eventLookupStatus.classList.add("error");
+        eventLookupStatus.textContent = `Error: ${err.message}`;
+    } finally {
+        eventLookupBtn.disabled = false;
+    }
+}
+
+eventLookupBtn.addEventListener("click", lookupEvent);
+eventLookupInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") lookupEvent();
+});
+
+// Clear every user-triggered, dataset-specific output so a newly generated
+// dataset starts from a clean slate (the automatic plots/summary/downloads
+// refresh themselves). Hoisted, so the generate handler above can call it.
+function resetTriggeredOutputs() {
+    // Model 1 (Simple)
+    model1Results.hidden = true;
+    model1Summary.innerHTML = "";
+    model1Status.textContent = "";
+    model1Status.classList.remove("error");
+
+    // Model 1 (Real)
+    m1rResults.hidden = true;
+    m1rSummary.innerHTML = "";
+    m1rStatus.textContent = "";
+    m1rStatus.classList.remove("error");
+    m1rDatasetId = null;
+    m1rCounts = { general: 0, strict: 0 };
+
+    // Event lookup
+    eventLookupResult.hidden = true;
+    eventLookupInfo.innerHTML = "";
+    eventLookupInput.value = "";
+    eventLookupStatus.textContent = "";
+    eventLookupStatus.classList.remove("error");
+}
+
 // ── Model 1: single vs. binary classifier ────────────────────────────────
 const model1File = document.getElementById("model1-file");
 const model1Filename = document.getElementById("model1-filename");
@@ -454,61 +549,62 @@ model1File.addEventListener("change", () => {
     model1Status.textContent = "";
 });
 
-model1ClassifyBtn.addEventListener("click", async () => {
-    const file = model1File.files[0];
-    if (!file) return;
+const model1GenBtn = document.getElementById("model1-gen-btn");
+const model1GenHint = document.getElementById("model1-gen-hint");
 
+function model1RenderResult(data) {
+    const pct = data.n_total > 0
+        ? ((100 * data.n_binary) / data.n_total).toFixed(1)
+        : "0.0";
+    model1Summary.innerHTML = `
+        <p>
+            Classified <strong>${data.n_total.toLocaleString()}</strong> events:
+            <strong>${data.n_single.toLocaleString()}</strong> single-lens and
+            <strong>${data.n_binary.toLocaleString()}</strong> binary-lens
+            (${pct}% binary).
+        </p>
+    `;
+    model1DownloadPredictions.href = `/api/model1/download-predictions/${data.dataset_id}`;
+    model1DownloadBinaries.href = `/api/model1/download-binaries/${data.dataset_id}`;
+    model1DownloadBinaries.classList.toggle("button--disabled", data.n_binary === 0);
+    model1Results.hidden = false;
+}
+
+// Run Model 1 (Simple) via a fetch that returns the standard summary payload.
+async function model1Run(doFetch) {
     model1ClassifyBtn.disabled = true;
+    model1GenBtn.disabled = true;
     model1Status.classList.remove("error");
     model1Status.textContent = "Checking dataset and running the model...";
     model1Results.hidden = true;
-
     try {
-        const formData = new FormData();
-        formData.append("file", file);
-
-        const resp = await fetch("/api/model1/predict", {
-            method: "POST",
-            body: formData,
-        });
-
+        const resp = await doFetch();
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
             throw new Error(err.detail || `Request failed with status ${resp.status}`);
         }
-
-        const data = await resp.json();
-        const pct = data.n_total > 0
-            ? ((100 * data.n_binary) / data.n_total).toFixed(1)
-            : "0.0";
-
-        model1Summary.innerHTML = `
-            <p>
-                Classified <strong>${data.n_total.toLocaleString()}</strong> events:
-                <strong>${data.n_single.toLocaleString()}</strong> single-lens and
-                <strong>${data.n_binary.toLocaleString()}</strong> binary-lens
-                (${pct}% binary).
-            </p>
-        `;
-
-        model1DownloadPredictions.href = `/api/model1/download-predictions/${data.dataset_id}`;
-        model1DownloadBinaries.href = `/api/model1/download-binaries/${data.dataset_id}`;
-
-        // No detected binaries -> nothing to download in that file.
-        if (data.n_binary === 0) {
-            model1DownloadBinaries.classList.add("button--disabled");
-        } else {
-            model1DownloadBinaries.classList.remove("button--disabled");
-        }
-
-        model1Results.hidden = false;
+        model1RenderResult(await resp.json());
         model1Status.textContent = "Done.";
     } catch (err) {
         model1Status.classList.add("error");
         model1Status.textContent = `Error: ${err.message}`;
     } finally {
-        model1ClassifyBtn.disabled = false;
+        model1ClassifyBtn.disabled = !model1File.files[0];
+        model1GenBtn.disabled = !currentDatasetId;
     }
+}
+
+model1ClassifyBtn.addEventListener("click", () => {
+    const file = model1File.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append("file", file);
+    model1Run(() => fetch("/api/model1/predict", { method: "POST", body: formData }));
+});
+
+model1GenBtn.addEventListener("click", () => {
+    if (!currentDatasetId) return;
+    model1Run(() => fetch(`/api/model1/predict-generated/${currentDatasetId}`, { method: "POST" }));
 });
 
 // ── Model 1 (Real) — two-stage classification of noisy / gapped curves ────
@@ -558,112 +654,82 @@ m1rFile.addEventListener("change", () => {
     m1rStatus.textContent = "";
 });
 
-m1rBtn.addEventListener("click", async () => {
-    const file = m1rFile.files[0];
-    if (!file) return;
+const m1rGenBtn = document.getElementById("model1real-gen-btn");
+const m1rGenHint = document.getElementById("model1real-gen-hint");
 
+function m1rRenderResult(data) {
+    m1rDatasetId = data.dataset_id;
+    m1rCounts = { general: data.n_general_binary, strict: data.n_strict_binary };
+
+    const pctG = data.n_total ? ((100 * data.n_general_binary) / data.n_total).toFixed(1) : "0.0";
+    const pctS = data.n_total ? ((100 * data.n_strict_binary) / data.n_total).toFixed(1) : "0.0";
+    const calNote = data.calibrated
+        ? "Probabilities are calibrated, so a threshold is a precision target."
+        : "This checkpoint is uncalibrated — probabilities are raw scores, not true probabilities.";
+
+    m1rSummary.innerHTML = `
+        <p>
+            Scored <strong>${data.n_total.toLocaleString()}</strong> events.
+            <strong>General</strong> (P ≥ ${data.general_threshold.toFixed(3)}) flagged
+            <strong>${data.n_general_binary.toLocaleString()}</strong> candidates (${pctG}%).
+            <strong>Strict</strong> (P ≥ ${data.strict_threshold.toFixed(3)}) kept
+            <strong>${data.n_strict_binary.toLocaleString()}</strong> (${pctS}%).
+        </p>
+        <p class="hint">${calNote}</p>
+    `;
+    m1rRefreshLinks();
+    m1rResults.hidden = false;
+}
+
+async function m1rRun(doFetch) {
     m1rBtn.disabled = true;
+    m1rGenBtn.disabled = true;
     m1rStatus.classList.remove("error");
     m1rStatus.textContent = "Checking dataset and running the model...";
     m1rResults.hidden = true;
-
     try {
-        const formData = new FormData();
-        formData.append("file", file);
-        const resp = await fetch("/api/model1-real/predict", { method: "POST", body: formData });
+        const resp = await doFetch();
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
             throw new Error(err.detail || `Request failed with status ${resp.status}`);
         }
-        const data = await resp.json();
-        m1rDatasetId = data.dataset_id;
-        m1rCounts = { general: data.n_general_binary, strict: data.n_strict_binary };
-
-        const pctG = data.n_total ? ((100 * data.n_general_binary) / data.n_total).toFixed(1) : "0.0";
-        const pctS = data.n_total ? ((100 * data.n_strict_binary) / data.n_total).toFixed(1) : "0.0";
-        const calNote = data.calibrated
-            ? "Probabilities are Platt-calibrated, so a threshold is a precision target."
-            : "This checkpoint is uncalibrated — probabilities are raw scores, not true probabilities.";
-
-        m1rSummary.innerHTML = `
-            <p>
-                Scored <strong>${data.n_total.toLocaleString()}</strong> events.
-                <strong>General</strong> (P ≥ ${data.general_threshold.toFixed(3)}) flagged
-                <strong>${data.n_general_binary.toLocaleString()}</strong> candidates (${pctG}%).
-                <strong>Strict</strong> (P ≥ ${data.strict_threshold.toFixed(3)}) kept
-                <strong>${data.n_strict_binary.toLocaleString()}</strong> (${pctS}%).
-            </p>
-            <p class="hint">${calNote}</p>
-        `;
-
-        m1rRefreshLinks();
-        m1rResults.hidden = false;
+        m1rRenderResult(await resp.json());
         m1rStatus.textContent = "Done.";
     } catch (err) {
         m1rStatus.classList.add("error");
         m1rStatus.textContent = `Error: ${err.message}`;
     } finally {
-        m1rBtn.disabled = false;
+        m1rBtn.disabled = !m1rFile.files[0];
+        m1rGenBtn.disabled = !currentDatasetId;
     }
+}
+
+m1rBtn.addEventListener("click", () => {
+    const file = m1rFile.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append("file", file);
+    m1rRun(() => fetch("/api/model1-real/predict", { method: "POST", body: formData }));
 });
 
-// ── Classify the recently generated dataset with Model 1 ──────────────────
-const genClassifyBtn = document.getElementById("gen-classify-btn");
-const genClassifyStatus = document.getElementById("gen-classify-status");
-const genModel1Results = document.getElementById("gen-model1-results");
-const genModel1Summary = document.getElementById("gen-model1-summary");
-const genModel1DownloadPredictions = document.getElementById("gen-model1-download-predictions");
-const genModel1DownloadBinaries = document.getElementById("gen-model1-download-binaries");
-
-genClassifyBtn.addEventListener("click", async () => {
+m1rGenBtn.addEventListener("click", () => {
     if (!currentDatasetId) return;
-
-    genClassifyBtn.disabled = true;
-    genClassifyStatus.classList.remove("error");
-    genClassifyStatus.textContent = "Running the recently generated dataset through Model 1...";
-    genModel1Results.hidden = true;
-
-    try {
-        const resp = await fetch(`/api/model1/predict-generated/${currentDatasetId}`, {
-            method: "POST",
-        });
-
-        if (!resp.ok) {
-            const err = await resp.json().catch(() => ({}));
-            throw new Error(err.detail || `Request failed with status ${resp.status}`);
-        }
-
-        const data = await resp.json();
-        const pct = data.n_total > 0
-            ? ((100 * data.n_binary) / data.n_total).toFixed(1)
-            : "0.0";
-
-        genModel1Summary.innerHTML = `
-            <p>
-                Classified <strong>${data.n_total.toLocaleString()}</strong> events:
-                <strong>${data.n_single.toLocaleString()}</strong> single-lens and
-                <strong>${data.n_binary.toLocaleString()}</strong> binary-lens
-                (${pct}% binary).
-            </p>
-        `;
-
-        genModel1DownloadPredictions.href = `/api/model1/download-predictions/${currentDatasetId}`;
-        genModel1DownloadBinaries.href = `/api/model1/download-binaries/${currentDatasetId}`;
-        if (data.n_binary === 0) {
-            genModel1DownloadBinaries.classList.add("button--disabled");
-        } else {
-            genModel1DownloadBinaries.classList.remove("button--disabled");
-        }
-
-        genModel1Results.hidden = false;
-        genClassifyStatus.textContent = "Done.";
-    } catch (err) {
-        genClassifyStatus.classList.add("error");
-        genClassifyStatus.textContent = `Error: ${err.message}`;
-    } finally {
-        genClassifyBtn.disabled = false;
-    }
+    m1rRun(() => fetch(`/api/model1-real/predict-generated/${currentDatasetId}`, { method: "POST" }));
 });
+
+// Enable / disable the "classify last generated dataset" buttons in both Model 1
+// sections after a generation. Both models need exactly 400 points; the server
+// still enforces the I(t)-magnitude and gap requirements and returns a clear
+// error if they are not met.
+function enableGenClassify(ok) {
+    const hint = ok
+        ? "Uses the dataset you just generated above."
+        : "The last generated dataset is not 400 points — regenerate with 400 to classify it.";
+    for (const [btn, h] of [[model1GenBtn, model1GenHint], [m1rGenBtn, m1rGenHint]]) {
+        btn.disabled = !ok;
+        h.textContent = hint;
+    }
+}
 
 // ── Reference distribution plots (Plotly.js) ─────────────────────────────
 (function () {
