@@ -475,7 +475,7 @@
 
                 <div class="model-stage">
                     <h3 class="validation-mode-title">General — candidate list</h3>
-                    <p class="hint">Every event more likely binary than not (P ≥ 0.5). A broad net for review or a second model; expect false positives.</p>
+                    <p class="hint">Two operating points on one calibrated score. General: every event more likely binary than not (P ≥ 0.5) — a broad net; expect false positives.</p>
                     <div class="stage-actions">
                         <a id="m1r-dl-pred-general" class="button" href="#">All events + verdict</a>
                         <a id="m1r-dl-bin-general" class="button" href="#">Flagged binaries only</a>
@@ -484,18 +484,10 @@
 
                 <div class="model-stage">
                     <h3 class="validation-mode-title">Strict — clean catalogue</h3>
-                    <p class="hint">Only high-confidence detections (precision ≈ 0.95). Far fewer events, almost no false positives — the trustworthy result.</p>
+                    <p class="hint">The same score at a higher threshold: only high-confidence detections (precision ≈ 0.9). Far fewer events, almost no false positives — the trustworthy result.</p>
                     <div class="stage-actions">
                         <a id="m1r-dl-pred-strict" class="button" href="#">All events + verdict</a>
                         <a id="m1r-dl-bin-strict" class="button" href="#">Flagged binaries only</a>
-                    </div>
-                </div>
-
-                <div class="model-stage">
-                    <h3 class="validation-mode-title">Cascade — candidates, re-judged</h3>
-                    <p class="hint">The general candidates, each carrying the strict verdict and probability — the hand-off product for a second-opinion model.</p>
-                    <div class="stage-actions">
-                        <a id="m1r-dl-cascade" class="button" href="#">Download cascade</a>
                     </div>
                 </div>
             </div>

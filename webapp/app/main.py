@@ -661,34 +661,6 @@ def api_model1_real_download_binaries(
     return _csv_response(out, f"detected_binaries_{stage}.csv", float_format="%.10g")
 
 
-@app.get("/api/model1-real/download-cascade/{dataset_id}")
-def api_model1_real_download_cascade(dataset_id: str, with_prob: bool = True):
-    """The strict stage applied to the GENERAL stage's candidates.
-
-    This is the review product: the candidate list from the general stage, each
-    row carrying the strict stage's verdict and calibrated probability. For a
-    single score the kept set equals the strict stage by construction
-    ({p>=general} AND {p>=strict} == {p>=strict}); it is exported separately so a
-    different second-opinion model can be substituted later without reworking the
-    pipeline or the UI.
-    """
-    data = _require_real(dataset_id)
-    prob = np.asarray(data["model1r_prob"])
-    general_pred = data["model1r_general_pred"]
-    strict_pred = data["model1r_strict_pred"]
-
-    cand = np.where(general_pred == 1)[0]
-    out = pd.DataFrame({
-        "row_index": cand,
-        "general_pred": "binary",
-        "strict_pred": ["binary" if strict_pred[i] == 1 else "single" for i in cand],
-        "kept_by_strict": [bool(strict_pred[i] == 1) for i in cand],
-    })
-    if with_prob:
-        out["prob_binary"] = prob[cand]
-    return _csv_response(out, "predictions_cascade_strict_over_general.csv")
-
-
 @app.get("/api/download/{dataset_id}")
 def api_download(dataset_id: str):
     data = _get_dataset(dataset_id)

@@ -1,10 +1,10 @@
 """Inference wrapper for Model 1 (Simple) -- single vs. binary classifier.
 
-Loads the trained PyTorch CNN from ``models/model_1/Simple/model_1_simple.pt``
+Loads the trained PyTorch CNN from ``model/simple/model_1_simple.pt``
 and runs predictions on uploaded "model" datasets (light curves only).
 
 The architecture and the per-curve normalization mirror
-``models/model_1/Simple/train_model_1_simple.py`` exactly -- if that training
+``model/simple/train_model_1_simple.py`` exactly -- if that training
 script changes, keep this in sync.
 
 torch is imported lazily (only when this module is first imported, i.e. on the
@@ -23,10 +23,10 @@ import torch
 # pyrefly: ignore [missing-import]
 import torch.nn as nn
 
-# models/model_1/Simple/model_1_simple.pt  (three levels up from this file)
+# model/simple/model_1_simple.pt  (three levels up from this file)
 MODEL_PATH = (
     Path(__file__).resolve().parents[2]
-    / "models" / "model_1" / "Simple" / "model_1_simple.pt"
+    / "model" / "simple" / "model_1_simple.pt"
 )
 
 N_POINTS = 400                  # the Simple model is fixed to 400-point curves

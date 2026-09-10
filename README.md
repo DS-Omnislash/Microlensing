@@ -23,13 +23,21 @@ Microlensing-1/
 │   │   ├── plotting.py       Matplotlib plots (distributions, samples, validation)
 │   │   ├── distribution_plots.py  Pre-computed KDE curves for the reference UI
 │   │   ├── content.py        Static descriptive content for the UI
-│   │   └── model1.py         Model 1 (Simple) inference wrapper (PyTorch)
+│   │   ├── model1.py         Model 1 (Simple) inference wrapper (PyTorch)
+│   │   └── model1_real.py    Model 1 (Real) wrapper — 4-channel input, calibration, two stages
 │   ├── static/               CSS and JavaScript
 │   └── templates/            Jinja2 HTML templates
-├── models/                   Trained ML models (model_1; model_2/3 are planned placeholders)
-│   └── model_1/
-│       ├── Simple/           Single-vs-binary CNN on PERFECT curves (upper bound)
-│       └── Real/             Same task on noisy / gapped / blended curves
+├── model/                    Trained ML models
+│   ├── simple/               Single-vs-binary CNN on PERFECT curves (upper bound)
+│   │   ├── train_model_1_simple.py
+│   │   └── model_1_simple.pt
+│   └── real/                 Same task on noisy / gapped / blended curves
+│       ├── CNN/              5-channel CNN — the shipped Real model
+│       │   ├── train_model_1_real.py
+│       │   └── model_1_real.pt
+│       └── GBT/              χ² single-lens-fit feature track (feeds the CNN + tree cross-check)
+│           ├── extract_features.py  Paczyński-fit residual (shared with the CNN) + features
+│           └── train_gbt.py         5-fold cross-validated GBT on those features
 ├── noise_analysis/           OGLE-IV empirical imperfection characterisation
 │   ├── ogle_event_ids.csv    17 172 OGLE-IV EWS event IDs (years 2011–2025)
 │   ├── fetch_phot.py         Downloads 3 000 random phot.dat files in parallel
@@ -96,10 +104,14 @@ them would preferentially remove the least-blended events and bias the distribut
 - **Download** — export as CSV or Pickle (`.pkl`). Filenames encode the request, e.g.
   `Microlensing_Dataset_1000_5pct_400pts_I_OGLE.csv` (`_A`/`_I` for the format, `_OGLE`
   when imperfections were applied).
-- **Model 1 — single vs. binary classifier** — a trained 1D CNN (PyTorch) predicting,
-  per event, whether a light curve is single- or binary-lens. Classify the dataset you
-  just generated with one click, or upload a *model dataset*. Returns a per-event
-  `predictions.csv` and a download of only the detected binary events.
+- **Model 1 — single vs. binary classifier** — trained 1D CNNs (PyTorch) predicting,
+  per event, whether a light curve is single- or binary-lens, in two variants: **Simple**
+  (perfect curves, the upper bound) and **Real** (noisy / gapped / blended). Classify the
+  dataset you just generated, or upload a *model dataset*. The Real model reports two
+  calibrated operating points (a permissive **general** candidate list and a
+  high-precision **strict** catalogue) and exports per-event predictions and a
+  binaries-only download for each; a single event can also be looked up by id to see its
+  curve, parameters and true label. See [Models](#models) for the numbers.
 
 ## Validation
 
@@ -128,22 +140,77 @@ acceptance threshold.
 
 ## Models
 
-| | Data | F1 | AUC |
+Both models are 1D CNNs (~53 k parameters): three convolutional blocks (kernels
+7 → 5 → 3, channels 32 → 64 → 128), concatenated global average **and** max pooling
+(max keeps a localized caustic spike that average pooling would dilute), and a small
+classifier head. Model selection and early stopping are on validation **AUC** — the
+threshold-independent ranking metric — not F1-at-0.5.
+
+| | Data | Test AUC | Notes |
 |---|---|---|---|
-| **Model 1 — Simple** | perfect I(t) curves | **0.999** | 0.9999 |
-| **Model 1 — Real** | noise + cadence + blending | **~0.90** | 0.992 |
+| **Model 1 — Simple** | perfect I(t) curves | **0.993** | F1 ≈ 0.986 — the upper bound |
+| **Model 1 — Real** | noise + cadence + blending | **0.600** | the honest, physics-limited result |
 
-Simple is the deliberate **upper bound**: it measures how separable the two classes are
-under ideal conditions. The gap to Real is the quantified cost of realism — noise,
-blending, and losing ~78 % of the sample points to the observing cadence.
+Simple is the deliberate **upper bound**: with noiseless curves a single lens is exactly
+time-symmetric, so single-vs-binary is nearly separable and the score says little beyond
+"the physics is right". It is a sanity check, not a headline.
 
-**Decision threshold.** The Real model does *not* use 0.5. Because the loss applies
-`pos_weight = 9` to correct the 9:1 class imbalance, the output probabilities are
-deliberately shifted upward; cutting at 0.5 corrects for the imbalance a *second* time
-and floods the binary class with false positives (precision 0.83 vs recall 0.91). The
-threshold is therefore selected by maximising F1 on the **validation** set — never on
-the test set, which would leak — and stored in the checkpoint as `decision_threshold`.
-Measured effect: **F1 0.872 → 0.903**.
+**Model 1 — Real is where the science is, and its ~0.60 ceiling is largely a physical
+result, not a bug.** On this realistic planet-heavy population (median q ≈ 10⁻³), roughly
+**88 % of binaries have an anomaly fainter than the photometric noise** (median binary
+anomaly ≈ 0.008 mag vs a fold noise ≈ 0.09 mag), and ~78 % of points are lost to cadence
+gaps. Most of the remaining gap to 1.0 is information that is simply not in the curve
+(data-processing inequality). The honest result is therefore a low recall at high
+precision, not a Simple-like score.
+
+**Input — 5 channels.** (0) per-curve z-scored magnitude, (1) observed mask, (2) fold
+residual `R(τ) = I(τ) − I(−τ)` on co-observed points, (3) fold mask, and (4) the residual
+of a **best-fit single-lens (Paczyński) model** (see below). Channels 2–3 give the binary
+signature — departure from time-symmetry — but the fold is only defined where *both* τ and
+−τ were observed, a small fraction of a ~78 %-gap curve. Channel 4 is the key addition:
+the single-lens-fit residual uses *every* observed point, and adding it lifted the CNN from
+AUC 0.557 (fold only) to **0.600**, tripling recall (see below).
+
+**Calibrated output, two operating points.** The raw sigmoid is not a probability
+(`pos_weight` inflates it), so the score is **isotonic-calibrated on validation** —
+monotonic, so AUC is unchanged; only the number's *meaning* changes, making a threshold a
+precision target. The result is reported at two operating points on the **same** calibrated
+score (not two models — one score, two cut-offs):
+
+| Operating point | Threshold | Test TP | Test FP | Precision | Recall |
+|---|---|---|---|---|---|
+| **general** (candidate list) | 0.50 | 632 | 109 | 0.853 | 0.112 |
+| **strict** (clean catalogue) | auto (0.67) | 557 | 55 | 0.910 | 0.099 |
+
+The strict threshold is selected on validation as the *lowest* cut reaching a 0.95
+precision target; on the held-out test set it delivered 0.910 (the threshold is chosen from
+few validation positives, so it generalises approximately). F1-maximisation is deliberately
+**not** used: with this ranker and a 15 % base rate it is maximised by flagging almost
+everything binary. Recall correctly *rises* with cadence coverage (0.024 → 0.184 from
+< 10 % to > 40 % observed) — the signature of a real detector, not a guesser.
+
+### The χ² single-lens-fit channel and the tree corroboration (`model/real/GBT/`)
+
+Channel 4 comes from fitting a **single-lens (Paczyński) model to each curve and measuring
+the residual**. In flux the blended single-lens model `F = a·A(u₀,τ) + b` is linear, so the
+fit is a 1-D search over u₀ with a closed-form non-negative least-squares inside, weighted
+by the real σ(I) noise model. `extract_features.py` computes this residual (shared with the
+CNN so both see an identical signal); `train_gbt.py` trains a gradient-boosted tree on it
+as an independent, cheap cross-check.
+
+Result (full 250 k dataset, 5-fold cross-validated):
+
+| Detector | AUC |
+|---|---|
+| fold residual alone (the old CNN's signal) | 0.527 |
+| χ² single-lens-fit residual alone | 0.573 |
+| **GBT on the full χ²-fit feature set** | **0.604 ± 0.002** |
+| **5-channel CNN (the shipped Real model)** | **0.600** |
+
+The tree and the CNN — different representations (engineered scalars vs the raw residual
+curve) — **independently converge on ~0.60**, which triangulates the result. It also
+revised the earlier claim of a hard 0.55 ceiling: part of that was the fold *representation*,
+not pure physics. The remaining gap to 1.0 is the genuine, physics-limited ceiling.
 
 ## Running locally
 

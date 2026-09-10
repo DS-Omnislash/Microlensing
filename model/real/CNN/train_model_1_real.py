@@ -7,7 +7,7 @@ microlensing light curves as single-lens (1) or binary-lens (2).
 
 "Real" framework: trained on OGLE-IV-like I(t) light curves WITH photometric
 noise and cadence gaps. This is the realistic counterpart to the "Simple"
-model (``models/model_1/Simple/train_model_1_simple.py``), which is trained on
+model (``model/simple/train_model_1_simple.py``), which is trained on
 perfect curves and sets the upper-bound performance.
 
 The two new complications versus Simple, and how they are handled:
@@ -93,7 +93,7 @@ Outputs (written next to this script)
 
 Run
 ---
-    venv/Scripts/python.exe models/model_1/Real/train_model_1_real.py
+    venv/Scripts/python.exe model/real/CNN/train_model_1_real.py
 """
 
 from __future__ import annotations
@@ -135,6 +135,13 @@ MODEL_OUT = HERE / "model_1_real.pt"
 HISTORY_PLOT = HERE / "training_history.png"
 CONFUSION_PLOT = HERE / "confusion_matrix.png"
 LOG_OUT = HERE / "training_log.txt"
+RESID_MMAP = HERE / "fit_residuals.f32"   # scratch memmap for the channel-4 fit residual
+
+# The single-lens-fit residual channel (channel 4) is computed by the SAME code as
+# the GBT feature extractor, so the CNN and the tree scout see an identical
+# signal. Imported from the sibling folder rather than duplicated.
+sys.path.insert(0, str(HERE.parent / "GBT"))
+from extract_features import single_lens_residual   # noqa: E402
 
 N_POINTS = 400          # light-curve length
 BATCH_SIZE = 256
@@ -296,26 +303,33 @@ def load_dataset(csv_path: Path) -> tuple[np.ndarray, np.ndarray]:
     return X, y
 
 
-IN_CHANNELS = 4
+IN_CHANNELS = 5
 
 
-def to_masked_channels(X: np.ndarray) -> np.ndarray:
-    """Turn (N, 400) magnitudes (with NaN gaps) into (N, 4, 400) input.
+def to_masked_channels(X: np.ndarray, fit_resid: np.ndarray | None = None) -> np.ndarray:
+    """Turn (N, 400) magnitudes (with NaN gaps) into (N, 5, 400) input.
 
     channel 0 : per-curve z-scored magnitude, gaps filled with 0
     channel 1 : observed mask                (1 = measured, 0 = cadence gap)
     channel 2 : fold residual R(tau)=I(tau)-I(-tau), same scale, gaps -> 0
     channel 3 : fold mask                    (1 where BOTH tau and -tau observed)
+    channel 4 : single-lens-fit residual     (arcsinh-compressed, gaps -> 0)
 
-    Channels 2-3 are the key addition for the Real model. A binary's signature IS
-    its departure from the single-lens time-symmetry, but with a plain masked
-    magnitude the CNN has to *learn* to compute that fold from a gappy curve and
-    it failed to (val AUC stuck at 0.50, below even a one-line fold-asymmetry
-    statistic). Handing it the fold residual directly lifts it to the information
-    ceiling (~0.55 on this data). The residual is only defined where BOTH tau and
-    -tau were observed, so channel 3 tells the model where channel 2 is real.
-    It is scaled by the curve's own std (not its own) so a real anomaly keeps its
-    physical size relative to the lensing peak. All ops are per row -- no leakage.
+    Channels 2-3 hand the model a binary's departure from single-lens time-symmetry
+    directly: with a plain masked magnitude the CNN could not learn to compute the
+    fold from a gappy curve and stalled at val AUC 0.50; the fold residual lifts it
+    to ~0.55. But the fold is only defined where BOTH tau and -tau were observed --
+    a small fraction of a ~78%-gap curve. Channel 4 adds the residual of a best-fit
+    single-lens (Paczynski) model, which is defined at EVERY observed point (the fit
+    uses all of them, not just mirror pairs); on the tree scout this representation
+    reached AUC ~0.60, above the fold's ~0.53, so it is fed to the CNN here too. The
+    standardised residual has heavy tails (bright points have tiny sigma), so it is
+    arcsinh-compressed -- monotonic, sign-preserving, linear near 0, log in the tails
+    -- to keep BatchNorm from being dominated by a few large-sigma outliers. Its
+    support is the observed mask (channel 1), so no separate mask channel is needed.
+    ``fit_resid`` is the RAW standardised residual from single_lens_residual (passed
+    in precomputed); None yields a zero channel (used only for shape/degenerate cases).
+    All ops are per row -- no leakage.
     """
     observed = ~np.isnan(X)                       # (N, 400) bool
     mask = observed.astype(np.float32)
@@ -335,8 +349,14 @@ def to_masked_channels(X: np.ndarray) -> np.ndarray:
     resid = np.where(both, (X - rev) / std, 0.0)
     fold_mask = both.astype(np.float32)
 
+    # Single-lens-fit residual channel (arcsinh-compressed heavy tails).
+    if fit_resid is None:
+        fit_ch = np.zeros_like(norm, dtype=np.float32)
+    else:
+        fit_ch = np.arcsinh(fit_resid).astype(np.float32)
+
     return np.stack([norm.astype(np.float32), mask,
-                     resid.astype(np.float32), fold_mask], axis=1)  # (N, 4, 400)
+                     resid.astype(np.float32), fold_mask, fit_ch], axis=1)  # (N, 5, 400)
 
 
 def fit_calibrator(logits: np.ndarray, y: np.ndarray) -> dict:
@@ -473,7 +493,7 @@ class LightCurveCNN(nn.Module):
         # average and global max. The two intermediate pools are MAX, so a sharp
         # caustic spike survives the 400->100 downsampling.
         self.features = nn.Sequential(
-            nn.Conv1d(IN_CHANNELS, 32, kernel_size=7, padding=3),  # mag, mask, fold-resid, fold-mask
+            nn.Conv1d(IN_CHANNELS, 32, kernel_size=7, padding=3),  # mag, mask, fold-resid, fold-mask, fit-resid
             nn.BatchNorm1d(32),
             nn.ReLU(inplace=True),
             nn.MaxPool1d(2),                       # 400 -> 200
@@ -525,14 +545,37 @@ def make_loader(dataset, indices: np.ndarray, shuffle: bool) -> DataLoader:
     )
 
 
-def batch_inputs(raw_xb: torch.Tensor) -> torch.Tensor:
-    """Build the (B, 4, 400) masked input from a batch of raw curves (B, 400).
+def batch_inputs(raw_xb: torch.Tensor, resid_xb: torch.Tensor) -> torch.Tensor:
+    """Build the (B, 5, 400) masked input from a batch of raw curves (B, 400).
 
     Done per batch rather than once over the whole dataset: materialising the
-    full (N, 4, 400) array was ~1.6 GB on its own and a chief cause of the RAM
-    crashes. Per batch it is a few MB.
+    full (N, 5, 400) array was ~2 GB on its own and a chief cause of the RAM
+    crashes. Per batch it is a few MB. ``resid_xb`` is the precomputed single-lens
+    fit residual for the batch (channel 4); it rides a disk-backed memmap, so only
+    the batch's rows are paged into RAM.
     """
-    return torch.from_numpy(to_masked_channels(raw_xb.numpy()))
+    return torch.from_numpy(to_masked_channels(raw_xb.numpy(), resid_xb.numpy()))
+
+
+def precompute_fit_residuals(X: np.ndarray, path: Path, chunk: int = 5000) -> np.memmap:
+    """Fit the single-lens residual of every curve ONCE into a disk memmap.
+
+    The fit is deterministic, so computing it per epoch would be pure waste; and
+    holding the (N, 400) residual in RAM alongside the curves risks the crashes
+    this machine has hit. Writing it to a memmap gets both: computed once, and
+    paged from disk per batch. Returns the array reopened read-only.
+    """
+    n = X.shape[0]
+    mm = np.memmap(path, dtype=np.float32, mode="w+", shape=(n, N_POINTS))
+    t0 = time.time()
+    for start in range(0, n, chunk):
+        r, _, _ = single_lens_residual(X[start:start + chunk].astype(np.float64))
+        mm[start:start + chunk] = r.astype(np.float32)
+        print(f"    fit residuals {min(start + chunk, n):>7,}/{n:,} "
+              f"({time.time() - t0:5.1f}s)", end="\r")
+    mm.flush()
+    print()
+    return np.memmap(path, dtype=np.float32, mode="r", shape=(n, N_POINTS))
 
 
 @torch.no_grad()
@@ -547,8 +590,8 @@ def evaluate(
     model.eval()
     criterion = nn.BCEWithLogitsLoss()
     losses, probs, trues, raw = [], [], [], []
-    for raw_xb, yb in loader:
-        xb = batch_inputs(raw_xb).to(DEVICE)
+    for raw_xb, resid_xb, yb in loader:
+        xb = batch_inputs(raw_xb, resid_xb).to(DEVICE)
         yb = yb.to(DEVICE)
         logits = model(xb)
         losses.append(criterion(logits, yb).item())
@@ -586,7 +629,14 @@ def run() -> None:
     # (measured on the raw curves, before the NaNs are filled per batch).
     test_gap_frac = np.isnan(X[test_idx]).mean(axis=1)
 
-    full_ds = TensorDataset(torch.from_numpy(X), torch.from_numpy(y))
+    # Channel 4: single-lens-fit residual, computed once into a disk memmap and
+    # wrapped as a tensor that shares the mmap buffer (so it stays on disk and is
+    # paged in per batch, not held in RAM). Same fit as the GBT scout.
+    print("Precomputing single-lens-fit residuals (channel 4) ...")
+    resid_mm = precompute_fit_residuals(X, RESID_MMAP)
+    resid_tensor = torch.from_numpy(np.asarray(resid_mm))
+
+    full_ds = TensorDataset(torch.from_numpy(X), resid_tensor, torch.from_numpy(y))
     train_loader = make_loader(full_ds, train_idx, shuffle=True)
     val_loader = make_loader(full_ds, val_idx, shuffle=False)
     test_loader = make_loader(full_ds, test_idx, shuffle=False)
@@ -645,8 +695,8 @@ def run() -> None:
     for epoch in range(1, EPOCHS + 1):
         model.train()
         epoch_losses = []
-        for step, (raw_xb, yb) in enumerate(train_loader):
-            xb = batch_inputs(raw_xb).to(DEVICE)
+        for step, (raw_xb, resid_xb, yb) in enumerate(train_loader):
+            xb = batch_inputs(raw_xb, resid_xb).to(DEVICE)
             yb = yb.to(DEVICE)
             optimizer.zero_grad()
             loss = criterion(model(xb), yb)
@@ -755,7 +805,7 @@ def run() -> None:
             "architecture": "LightCurveCNN",
             "n_points": N_POINTS,
             "in_channels": IN_CHANNELS,
-            "normalization": "per_curve_zscore_masked_fold",
+            "normalization": "per_curve_zscore_masked_fold_fitresid",
             "label_map": {"single": 0, "binary": 1},
             # Inference MUST apply this calibration to the raw logit and then cut
             # at these thresholds -- the raw sigmoid is not a probability.
@@ -833,6 +883,16 @@ def run() -> None:
     fig2.tight_layout()
     fig2.savefig(CONFUSION_PLOT, dpi=120)
     print(f"Saved confusion matrix -> {CONFUSION_PLOT.name}")
+
+    # Drop the channel-4 residual memmap scratch file (~N*400*4 bytes). Release the
+    # tensor/mmap handles first so Windows will allow the unlink; ignore if it is
+    # still held (the next run recreates it with mode 'w+' anyway).
+    try:
+        del resid_tensor, resid_mm, full_ds, train_loader, val_loader, test_loader
+        gc.collect()
+        RESID_MMAP.unlink(missing_ok=True)
+    except (OSError, NameError):
+        pass
 
 
 def main() -> None:

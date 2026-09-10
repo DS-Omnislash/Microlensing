@@ -1,0 +1,46 @@
+Loaded 250,000 events  |  single: 212,500  binary: 37,500  (15.0% positive)  |  15 features
+  fold 1/5:  GBT AUC = 0.6040   (chi2_dof alone 0.5738, fold_max alone 0.5246)
+  fold 2/5:  GBT AUC = 0.6049   (chi2_dof alone 0.5699, fold_max alone 0.5332)
+  fold 3/5:  GBT AUC = 0.6029   (chi2_dof alone 0.5738, fold_max alone 0.5257)
+  fold 4/5:  GBT AUC = 0.6004   (chi2_dof alone 0.5739, fold_max alone 0.5293)
+  fold 5/5:  GBT AUC = 0.6059   (chi2_dof alone 0.5731, fold_max alone 0.5237)
+
+============================================================
+GBT (all features)   AUC = 0.6036 +/- 0.0019
+chi2_dof alone       AUC = 0.5729
+fold_max alone       AUC = 0.5273   (the CNN's signal)
+CNN (raw curve)      AUC = 0.600
+============================================================
+Verdict: GBT is +0.004 vs the CNN (~0.60) -- MATCHES the CNN (within noise) -- the two representations converge on the same ceiling
+
+Permutation importance (drop in AUC when the feature is shuffled)
+  max_abs_r       0.0225 +/- 0.0011
+  mag_std         0.0190 +/- 0.0023
+  tau_absmax      0.0088 +/- 0.0011
+  fold_max        0.0053 +/- 0.0010
+  chi2_dof        0.0037 +/- 0.0005
+  coverage        0.0034 +/- 0.0012
+  mag_skew        0.0029 +/- 0.0006
+  fold_n          0.0023 +/- 0.0004
+  pos_excess      0.0013 +/- 0.0008
+  resid_span      0.0010 +/- 0.0008
+  mag_kurt        0.0009 +/- 0.0004
+  n_r_gt3         0.0003 +/- 0.0006
+  chi2            0.0002 +/- 0.0004
+
+============================================================
+Held-out test (15% split)   AUC = 0.6047
+Confusion matrix at threshold 0.50 (illustrative):
+              precision    recall  f1-score   support
+
+      single     0.8722    0.8443    0.8581     31875
+      binary     0.2533    0.2992    0.2743      5625
+
+    accuracy                         0.7626     37500
+   macro avg     0.5628    0.5718    0.5662     37500
+weighted avg     0.7794    0.7626    0.7705     37500
+
+Saved model -> model_gbt.joblib
+Saved confusion matrix -> confusion_matrix.png
+
+Saved training log -> training_log.txt

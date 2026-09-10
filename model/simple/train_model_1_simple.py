@@ -64,7 +64,7 @@ Outputs (written next to this script)
 
 Run
 ---
-    venv/Scripts/python.exe models/model_1/Simple/train_model_1_simple.py
+    venv/Scripts/python.exe model/simple/train_model_1_simple.py
 """
 
 from __future__ import annotations

@@ -1,13 +1,13 @@
 """Inference wrapper for Model 1 (Real) -- single vs. binary on OGLE-like curves.
 
-Loads the trained CNN from ``models/model_1/Real/model_1_real.pt`` and scores
+Loads the trained CNN from ``model/real/CNN/model_1_real.pt`` and scores
 uploaded or in-app "model" datasets. Unlike the Simple wrapper this one ACCEPTS
 cadence gaps (NaN): the Real model is trained on noisy, gapped, blended curves
 and takes an observed-mask channel. Clean/complete curves are accepted too (they
 simply have a fully-observed mask).
 
 The preprocessing and architecture mirror
-``models/model_1/Real/train_model_1_real.py`` exactly -- if that script changes,
+``model/real/CNN/train_model_1_real.py`` exactly -- if that script changes,
 keep this in sync.
 
 Two-stage output
@@ -25,6 +25,7 @@ prediction request) so the webapp still starts without torch installed.
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -34,14 +35,19 @@ import torch
 # pyrefly: ignore [missing-import]
 import torch.nn as nn
 
-# models/model_1/Real/model_1_real.pt  (three levels up from this file)
-MODEL_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "models" / "model_1" / "Real" / "model_1_real.pt"
-)
+_ROOT = Path(__file__).resolve().parents[2]
+
+# model/real/CNN/model_1_real.pt  (three levels up from this file)
+MODEL_PATH = _ROOT / "model" / "real" / "CNN" / "model_1_real.pt"
+
+# Channel 4 (single-lens-fit residual) is built by the SAME code the training
+# script uses, imported from the GBT feature extractor so it cannot drift.
+sys.path.insert(0, str(_ROOT / "model" / "real" / "GBT"))
+# pyrefly: ignore [missing-import]
+from extract_features import single_lens_residual   # noqa: E402
 
 N_POINTS = 400
-IN_CHANNELS = 4
+IN_CHANNELS = 5
 _TIME_COL_RE = re.compile(r"^t_\d+$")
 
 # Fallbacks only if a checkpoint predates the two-stage fields.
@@ -54,7 +60,7 @@ class ModelDatasetError(ValueError):
 
 
 class LightCurveCNN(nn.Module):
-    """1D CNN -- mirror of train_model_1_real.LightCurveCNN (4-channel input)."""
+    """1D CNN -- mirror of train_model_1_real.LightCurveCNN (5-channel input)."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -105,6 +111,20 @@ def _get_model() -> LightCurveCNN:
                 f"({MODEL_PATH.name}). The model has not been trained yet."
             )
         checkpoint = torch.load(MODEL_PATH, map_location="cpu")
+
+        # The current model takes a 5-channel input (channel 4 = single-lens-fit
+        # residual). A checkpoint from before that channel was added has a 4-channel
+        # first conv and would fail load_state_dict with a cryptic shape mismatch;
+        # catch it here with an actionable message instead.
+        ckpt_channels = int(checkpoint.get("in_channels", 4))
+        if ckpt_channels != IN_CHANNELS:
+            raise ModelDatasetError(
+                f"The trained Real model on the server has a {ckpt_channels}-channel "
+                f"input, but this server expects {IN_CHANNELS} channels (the "
+                "single-lens-fit residual channel was added). Retrain with the current "
+                "model/real/CNN/train_model_1_real.py to produce a matching model."
+            )
+
         model = LightCurveCNN()
         model.load_state_dict(checkpoint["model_state_dict"])
         model.eval()
@@ -120,7 +140,7 @@ def _get_model() -> LightCurveCNN:
             raise ModelDatasetError(
                 "The trained Real model on the server predates the calibrated "
                 "two-stage design (no calibration stored in the checkpoint). "
-                "Retrain with the current models/model_1/Real/train_model_1_real.py "
+                "Retrain with the current model/real/CNN/train_model_1_real.py "
                 "to produce a checkpoint with calibration and both thresholds."
             )
         _calibration = cal
@@ -152,13 +172,17 @@ def is_calibrated() -> bool:
 
 
 def to_masked_channels(X: np.ndarray) -> np.ndarray:
-    """(N, 400) magnitudes (NaN = gap) -> (N, 4, 400) input.
+    """(N, 400) magnitudes (NaN = gap) -> (N, 5, 400) input.
 
     Mirror of train_model_1_real.to_masked_channels:
         0 magnitude z-scored on observed points, gaps -> 0
         1 observed mask
         2 fold residual I(tau)-I(-tau) on co-observed points, same scale
         3 fold mask (both tau and -tau observed)
+        4 single-lens-fit residual, arcsinh-compressed, gaps -> 0
+
+    Channel 4 uses the shared single_lens_residual (fit in float64, as in training)
+    so inference and training see a bit-identical channel.
     """
     observed = ~np.isnan(X)
     mask = observed.astype(np.float32)
@@ -175,8 +199,11 @@ def to_masked_channels(X: np.ndarray) -> np.ndarray:
     resid = np.where(both, (X - rev) / std, 0.0)
     fold_mask = both.astype(np.float32)
 
+    fit_resid, _, _ = single_lens_residual(X.astype(np.float64))
+    fit_ch = np.arcsinh(fit_resid).astype(np.float32)
+
     return np.stack([norm.astype(np.float32), mask,
-                     resid.astype(np.float32), fold_mask], axis=1)
+                     resid.astype(np.float32), fold_mask, fit_ch], axis=1)
 
 
 def _extract_lightcurves(df: pd.DataFrame) -> np.ndarray:

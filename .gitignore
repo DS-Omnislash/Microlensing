@@ -223,7 +223,13 @@ NOISE_MODEL_NOTES.md
 # Large generated ML datasets — regenerate from the webapp; do not commit
 # (GitHub rejects files over 100 MB). Training scripts and trained models
 # (*.pt) are kept; only the bulky source CSVs are ignored.
-models/**/*.csv
+model/**/*.csv
+
+# Scratch memmap for the single-lens-fit residual channel (recomputed each run)
+model/**/*.f32
+
+# Real OGLE-discovered-planet data track — work in progress, not part of the repo
+real_data/
 
 # Local audit report — session artifact, not part of the project
 AUDIT.md

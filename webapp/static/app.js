@@ -620,7 +620,6 @@ const m1rLinks = {
     binGeneral: document.getElementById("m1r-dl-bin-general"),
     predStrict: document.getElementById("m1r-dl-pred-strict"),
     binStrict: document.getElementById("m1r-dl-bin-strict"),
-    cascade: document.getElementById("m1r-dl-cascade"),
 };
 
 let m1rDatasetId = null;
@@ -636,11 +635,9 @@ function m1rRefreshLinks() {
     m1rLinks.binGeneral.href = `${base}/download-binaries/${m1rDatasetId}?stage=general&with_prob=${wp}`;
     m1rLinks.predStrict.href = `${base}/download-predictions/${m1rDatasetId}?stage=strict&with_prob=${wp}`;
     m1rLinks.binStrict.href = `${base}/download-binaries/${m1rDatasetId}?stage=strict&with_prob=${wp}`;
-    m1rLinks.cascade.href = `${base}/download-cascade/${m1rDatasetId}?with_prob=${wp}`;
 
     m1rLinks.binGeneral.classList.toggle("button--disabled", m1rCounts.general === 0);
     m1rLinks.binStrict.classList.toggle("button--disabled", m1rCounts.strict === 0);
-    m1rLinks.cascade.classList.toggle("button--disabled", m1rCounts.general === 0);
 }
 
 m1rWithProb.addEventListener("change", m1rRefreshLinks);
