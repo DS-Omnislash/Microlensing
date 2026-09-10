@@ -1,4 +1,4 @@
-﻿"""Matplotlib figure generation for the dataset generator web UI.
+"""Matplotlib figure generation for the dataset generator web UI.
 
 All figures are rendered server-side and returned as base64-encoded PNG
 strings so they can be embedded directly in the HTML response.
@@ -304,8 +304,9 @@ def plot_sample_single_lightcurves(data, seed=42):
         ax = axes[0, j]
         if j < len(single_indices):
             idx = single_indices[j]
+            row_idx = data.get("row_of_event", np.arange(data["n_total"]))[idx]
             _style_curve_axis(ax, tau, curves[j], "#2563eb", use_mag, ogle, "A(u)")
-            ax.set_title(f"Single #{idx}\nu0={u0_all[idx]:.3f}", fontsize=10)
+            ax.set_title(f"Single #{row_idx}\nu0={u0_all[idx]:.3f}", fontsize=10)
         else:
             ax.axis("off")
 
@@ -342,9 +343,11 @@ def plot_sample_binary_lightcurves(data, seed=42):
         ax = axes[0, j]
         if j < len(binary_interesting):
             idx = binary_interesting[j]
-            _style_curve_axis(ax, tau, curves[j], "#dc2626", use_mag, ogle, "A")
+            orig_idx = n_single + idx
+            row_idx = data.get("row_of_event", np.arange(data["n_total"]))[orig_idx]
+            _style_curve_axis(ax, tau, curves[j], "#dc2626", use_mag, ogle, "A(u)")
             ax.set_title(
-                f"Binary #{idx}\nq={data['q_binary'][idx]:.2e}, A_max={binary_peaks[idx]:.1f}",
+                f"Binary #{row_idx}\nq={data['q_binary'][idx]:.2e}, A_max={binary_peaks[idx]:.1f}",
                 fontsize=10,
             )
         else:

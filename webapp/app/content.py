@@ -1,4 +1,4 @@
-﻿"""Static explanatory content describing the distribution logic.
+"""Static explanatory content describing the distribution logic.
 
 All references are to ``TdR_RocRC.pdf`` (Roc Rubio, "Gravitational
 Microlensing"), section "Parameters distributions" (pp. 20-29).
@@ -13,9 +13,8 @@ EVENT_RATIO_EXPLANATION = (
     "Confirmed planetary (binary-lens) microlensing detections are rare "
     "compared to the total number of observed microlensing events: most "
     "alerts turn out to be single-lens (point-source point-lens) events. "
-    "The reference dataset in this study used 95,000 single-lens events and "
-    "5,000 binary-lens events (a 95% / 5% split), which keeps the binary "
-    "class representative of how rare planetary events are in real surveys."
+    "Please be aware of this extreme class imbalance for your project's use, "
+    "as an artificially balanced dataset may not reflect real surveys."
 )
 
 N_TIME_EXPLANATION = (

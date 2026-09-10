@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -12,9 +12,9 @@
 <body>
     <header>
         <div class="header-inner">
-            <span class="header-eyebrow">Gravitational Microlensing</span>
-            <h1>Synthetic Dataset Generator</h1>
-            <p>Single-lens (Paczyński) and binary-lens (image-plane solution, Witt &amp; Mao 1995) light curves sampled from empirical distributions — <em>TdR_RocRC.pdf</em>, Roc Rubió.</p>
+            <span class="header-eyebrow">TdR_25-27 Roc Rubió</span>
+            <h1>Gravitational Microlensing Tool Hub</h1>
+            <p>A comprehensive suite offering synthetic dataset generation with realistic physical parameters and noise, parameter validation, theoretical distribution explanations, and data feeding for machine learning models to classify event types.</p>
         </div>
     </header>
 
@@ -32,7 +32,6 @@
                 <div class="field">
                     <label for="binary_percent">
                         Binary-lens fraction
-                        <span class="recommended">recommended {{ recommended_binary_percent | int }}%</span>
                     </label>
                     <div class="range-row">
                         <input type="range" id="binary_percent_range" min="{{ binary_pct_min }}" max="{{ binary_pct_max }}"
@@ -48,7 +47,7 @@
                 <div class="field">
                     <label for="n_time">
                         Points per light curve
-                        <span class="recommended">recommended {{ recommended_n_time }}</span>
+                        <span class="recommended">for available models use: {{ recommended_n_time }}</span>
                     </label>
                     <input type="number" id="n_time" name="n_time"
                            min="{{ n_time_min }}" max="{{ n_time_max }}" value="{{ recommended_n_time }}" step="1" required>
@@ -79,10 +78,10 @@
                         </label>
                         <label class="radio-item">
                             <input type="radio" name="ogle_noise" value="ogle" id="imperfections-ogle">
-                            <span>OGLE noise &mdash; photometric scatter &amp; cadence gaps</span>
+                            <span>OGLE noise &mdash; photometric scatter, cadence gaps &amp; blending</span>
                         </label>
                     </div>
-                    <p class="hint">Adds realistic OGLE-IV imperfections: photometric noise &sigma;(I) and cadence gaps drawn from 3000 EWS event light curves. Unobserved time points become NaN. Only available in I(t) mode.</p>
+                    <p class="hint">Adds realistic OGLE-IV imperfections: photometric noise &sigma;(I), blending flux from neighboring stars, and cadence gaps drawn from 3000 EWS event light curves. Unobserved time points become NaN. Only available in I(t) mode.</p>
                 </div>
 
                 <div class="field">
@@ -364,7 +363,7 @@
                     <h3 class="validation-mode-title">How it was created</h3>
                     <p class="hint">
                         Trained on 100,000 synthetic I(t) light curves generated above
-                        (90% single / 10% binary, 400 points each), with no noise or cadence
+                        (85% single / 15% binary, 400 points each), with no noise or cadence
                         gaps — the <em>Simple</em> framework. Each curve is normalized
                         individually before training, and the 90/10 class imbalance is handled
                         with a weighted loss. On a held-out test set it reaches F1 ≈ 0.999.
@@ -417,8 +416,9 @@
                 <div class="model-about-col">
                     <h3 class="validation-mode-title">What this model is</h3>
                     <p class="hint">
-                        A 1D CNN taking four channels: the magnitude curve, an observed
-                        mask, and the <em>fold residual</em> I(τ)−I(−τ) with its own mask.
+                        A 1D CNN taking five channels: the magnitude curve, an observed
+                        mask, the <em>fold residual</em> I(τ)−I(−τ) with its own mask,
+                        and the single-lens-fit residual.
                         A single lens is symmetric in τ, so a binary's signature is exactly
                         that departure from symmetry — the model is handed it directly.
                     </p>
