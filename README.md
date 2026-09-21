@@ -1,8 +1,18 @@
-# Microlensing Dataset Generator
+# Gravitational Microlensing Tool Hub
 
-A web application for generating synthetic gravitational microlensing light-curve
-datasets, based on the parameter distributions and physical models from
-`TdR_RocRC.pdf` (Roc Rubió, "Gravitational Microlensing", pp. 8–29).
+A web application and machine-learning pipeline for gravitational microlensing
+research, developed as part of the TdR_25-27 by Roc Rubió. The project provides:
+
+- **Synthetic dataset generation** — single-lens (Paczyński) and binary-lens
+  (image-plane solution, Witt & Mao 1995) light curves sampled from empirical
+  distributions (`TdR_RocRC.pdf`, pp. 8–29), with optional OGLE-IV realistic
+  imperfections.
+- **Parameter validation** — 14 goodness-of-fit checks against reference
+  distributions.
+- **Distribution logic reference** — interactive cards explaining each
+  parameter's sampling formula, KDE curves and literature citations.
+- **ML classification** — trained 1D CNNs and a gradient-boosted tree (GBT)
+  for single-vs-binary event classification, with live in-app inference.
 
 Optional OGLE-IV realistic imperfections — **photometric noise, cadence gaps and
 blending** — can be applied to I(t)-mode datasets. Noise and cadence are derived
@@ -24,7 +34,7 @@ Microlensing-1/
 │   │   ├── distribution_plots.py  Pre-computed KDE curves for the reference UI
 │   │   ├── content.py        Static descriptive content for the UI
 │   │   ├── model1.py         Model 1 (Simple) inference wrapper (PyTorch)
-│   │   └── model1_real.py    Model 1 (Real) wrapper — 4-channel input, calibration, two stages
+│   │   └── model1_real.py    Model 1 (Real) wrapper — 5-channel input, calibration, two stages
 │   ├── static/               CSS and JavaScript
 │   └── templates/            Jinja2 HTML templates
 ├── model/                    Trained ML models
@@ -37,7 +47,8 @@ Microlensing-1/
 │       │   └── model_1_real.pt
 │       └── GBT/              χ² single-lens-fit feature track (feeds the CNN + tree cross-check)
 │           ├── extract_features.py  Paczyński-fit residual (shared with the CNN) + features
-│           └── train_gbt.py         5-fold cross-validated GBT on those features
+│           ├── train_gbt.py         5-fold cross-validated GBT on those features
+│           └── model_gbt.joblib     Trained GBT checkpoint
 ├── noise_analysis/           OGLE-IV empirical imperfection characterisation
 │   ├── ogle_event_ids.csv    17 172 OGLE-IV EWS event IDs (years 2011–2025)
 │   ├── fetch_phot.py         Downloads 3 000 random phot.dat files in parallel
@@ -46,9 +57,14 @@ Microlensing-1/
 │   ├── baseline_model.py     Per-event observed baselines; → baseline_model.npz/.png
 │   ├── blend_model.py        Paired (I_s, f_s) blending;   → blend_model.npz/.png
 │   └── ogle_phot_raw.npz     Pooled photometry (7.6 M obs, 89 MB — not tracked in git)
+├── real_data/                Real OGLE-IV planetary microlensing events
+│   ├── fetch_ogle_planets.py Downloads and windows real planet light curves onto the
+│   │                         model's 400-slot tau grid for positive-label evaluation
+│   ├── ogle_planets_dataset.csv  Full fetched dataset (all matched planet events)
+│   └── ogle_planets_upload.csv   Upload-ready subset for the Real model
 ├── distributions/            Standalone scripts — one per parameter distribution
-├── data/                     Local caches (ogle_phot_cache)
 ├── requirements.txt
+├── run.bat                   Self-bootstrapping Windows launcher
 └── TdR_RocRC.pdf             Reference document (parameter distributions, pp. 20–29)
 ```
 
@@ -66,8 +82,8 @@ them would preferentially remove the least-blended events and bias the distribut
 
 ## Features
 
-- Configure total events, single-lens / binary-lens split (recommended 95 % / 5 %,
-  matching the reference dataset), and time points per light curve (recommended 400).
+- Configure total events, single-lens / binary-lens split, and time points per
+  light curve (for the available ML models, use 400).
 - **Light curve format** — A(t) (dimensionless amplification) or I(t) (I-band
   magnitudes), converted via `I(t) = I_s − 2.5 log₁₀ A(t)`.
 - **Event order** — rows are grouped (all single-lens first, then binary-lens) or,
@@ -211,6 +227,14 @@ The tree and the CNN — different representations (engineered scalars vs the ra
 curve) — **independently converge on ~0.60**, which triangulates the result. It also
 revised the earlier claim of a hard 0.55 ceiling: part of that was the fold *representation*,
 not pure physics. The remaining gap to 1.0 is the genuine, physics-limited ceiling.
+
+### Real OGLE-IV planet evaluation (`real_data/`)
+
+`fetch_ogle_planets.py` downloads real OGLE-IV planetary microlensing events from the
+OGLE EWS archive, windows each light curve using the published PSPL fit parameters
+(t₀, t_E), and maps it onto the model's fixed 400-slot τ grid. These events serve as
+confirmed positive labels (every one hosts a discovered planet) for evaluating the Real
+model on actual observational data — not synthetic curves.
 
 ## Running locally
 
