@@ -228,8 +228,8 @@ model/**/*.csv
 # Scratch memmap for the single-lens-fit residual channel (recomputed each run)
 model/**/*.f32
 
-# Real OGLE-discovered-planet data track — work in progress, not part of the repo
-real_data/
-
 # Local audit report — session artifact, not part of the project
 AUDIT.md
+
+# Local review files
+web_real_audit1.md
