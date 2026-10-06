@@ -6,13 +6,13 @@ research, developed as the TdR (Treball de Recerca) 2025–2027 by Roc Rubió.
 The project provides:
 
 - **Synthetic dataset generation** — single-lens (Paczyński) and binary-lens
-  (image-plane solution, Witt & Mao 1995) light curves sampled from empirical
+  (Witt & Mao 1995) light curves sampled from empirical
   distributions, with optional OGLE-IV realistic imperfections.
 - **Parameter validation** — 14 goodness-of-fit checks against reference
   distributions.
 - **Distribution logic reference** — interactive cards explaining each
   parameter's sampling formula, KDE curves and literature citations.
-- **ML classification** — trained 1D CNNs and a gradient-boosted tree (GBT)
+- **ML classification** — trained 2 CNNs and a gradient-boosted tree (GBT)
   for single-vs-binary event classification, with live in-app inference.
 - **Real data evaluation** — the trained model is validated against 92 genuine
   OGLE-IV planetary microlensing events, successfully flagging 53.3 % of
