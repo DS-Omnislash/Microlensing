@@ -414,13 +414,13 @@ def plot_validation_available(data):
             ax.axvline(0.45, color="red", ls="--", lw=1.5, label="TdR Image 2 peak (~0.45 Msun)")
             ax.set_xlabel("Lens Mass (Msun)")
             ax.set_ylabel("Probability Density")
-            ax.set_title("Lens Mass M* [Image 2, p.20]")
+            ax.set_title("Lens Mass M* [Image 2, p.27]")
             ax.legend()
             median_mass = float(np.median(M_star))
             in_range = 0.30 <= median_mass <= 0.60
             stats_out.append({
                 "parameter": "Lens Mass M* (Msun)",
-                "reference": "TdR Image 2 (p.20): bimodal, primary peak ~0.45 Msun, decline beyond 0.8 Msun",
+                "reference": "TdR Image 2 (p.27): bimodal, primary peak ~0.45 Msun, decline beyond 0.8 Msun",
                 "observed": f"median = {median_mass:.3f} Msun",
                 "expected": "median in [0.30, 0.60] Msun",
                 "status": "OK" if in_range else "CHECK",
@@ -436,13 +436,13 @@ def plot_validation_available(data):
             ax.axvline(6800, color="red", ls="--", lw=1.5, label="TdR Image 5 bulge peak (~6800 pc)")
             ax.set_xlabel("Lens Distance D_l (pc)")
             ax.set_ylabel("Probability Density")
-            ax.set_title("Distance to Lens D_l [Image 5, p.23]")
+            ax.set_title("Distance to Lens D_l [Image 5, p.30]")
             ax.legend()
             median_dl = float(np.median(D_l))
             in_range = 4500 <= median_dl <= 8000
             stats_out.append({
                 "parameter": "Distance to Lens D_l (pc)",
-                "reference": "TdR Image 5 (p.23): Galactic bulge peak at 6-7 kpc (Paczynski 1991)",
+                "reference": "TdR Image 5 (p.30): Galactic bulge peak at 6-7 kpc (Paczynski 1991)",
                 "observed": f"median = {median_dl:.0f} pc",
                 "expected": "median in [4500, 8000] pc",
                 "status": "OK" if in_range else "CHECK",
@@ -457,13 +457,13 @@ def plot_validation_available(data):
                        label="Uniform[100, 8000] reference")
             ax.set_xlabel("Lens-Source Distance D_ls (pc)")
             ax.set_ylabel("Probability Density")
-            ax.set_title("Lens-Source Distance D_ls [Image 4, p.22]")
+            ax.set_title("Lens-Source Distance D_ls [Image 4, p.29]")
             ax.legend()
             median_dls = float(np.median(D_ls))
             in_range = 1500 <= median_dls <= 4500
             stats_out.append({
                 "parameter": "Lens-Source Distance D_ls (pc)",
-                "reference": "TdR Image 4 (p.22): irregular, roughly uniform on [100, 8000] pc, median ~2900 pc",
+                "reference": "TdR Image 4 (p.29): irregular, roughly uniform on [100, 8000] pc, median ~2900 pc",
                 "observed": f"median = {median_dls:.0f} pc",
                 "expected": "median in [1500, 4500] pc",
                 "status": "OK" if in_range else "CHECK",
@@ -481,13 +481,13 @@ def plot_validation_available(data):
                        label="Uniform(0,1) [Paczynski 1986]")
             ax.set_xlabel("Impact Parameter u0")
             ax.set_ylabel("Probability Density")
-            ax.set_title("Impact Parameter u0 [Image 7, p.25]")
+            ax.set_title("Impact Parameter u0 [Image 7, p.32]")
             ax.legend()
             ks_stat, ks_p = stats.kstest(u0, "truncexpon", args=(1.0 * 3.0, 0, 1.0 / 3.0))
             thr_u0 = _ks_threshold(len(u0))
             stats_out.append({
                 "parameter": "Impact Parameter u0",
-                "reference": "TdR Image 7 (p.25): OGLE-IV observational bias, truncated exponential (lambda=3) on [0,1]",
+                "reference": "TdR Image 7 (p.32): OGLE-IV observational bias, truncated exponential (lambda=3) on [0,1]",
                 "observed": f"KS statistic = {ks_stat:.4f} (p = {ks_p:.3g}), median = {np.median(u0):.3f}",
                 "expected": f"TruncExp(lambda=3) shape (KS stat < {thr_u0:.3f})",
                 "status": "OK" if ks_stat < thr_u0 else "CHECK",
@@ -546,7 +546,7 @@ def plot_validation_available(data):
                            label=f"Median: {np.median(I_s):.2f} mag")
                 ax.set_xlabel("Source Baseline Magnitude I_s (mag)")
                 ax.set_ylabel("Probability Density")
-                ax.set_title("Source Baseline Magnitude I_s [Image 10, p.28]")
+                ax.set_title("Source Baseline Magnitude I_s [Image 10, p.35]")
                 ax.legend()
                 z_data = np.clip((I_s - 14.0) / 8.0, 0.0, 1.0)
                 ks_stat_is, ks_p_is = stats.kstest(z_data, "beta", args=(15.0, 6.0))
@@ -554,7 +554,7 @@ def plot_validation_available(data):
                 thr_is = _ks_threshold(len(I_s))
                 stats_out.append({
                     "parameter": "Source Baseline Magnitude I_s (mag)",
-                    "reference": "TdR Image 10 (p.28): OGLE-IV, Beta(15,6) scaled to [14,22], mode ~19.89 mag",
+                    "reference": "TdR Image 10 (p.35): OGLE-IV, Beta(15,6) scaled to [14,22], mode ~19.89 mag",
                     "observed": f"KS statistic = {ks_stat_is:.4f} (p = {ks_p_is:.3g}), median = {median_is:.2f} mag",
                     "expected": f"Beta(15,6) scaled to [14,22], peak ~19.89 mag (KS stat < {thr_is:.3f})",
                     "status": "OK" if ks_stat_is < thr_is else "CHECK",
@@ -574,10 +574,10 @@ def plot_validation_available(data):
         mb_scale = 200.0 / np.sqrt(2.0)
         mb_pdf = stats.maxwell.pdf(x_vel, scale=mb_scale)
         ax2.plot(x_vel, mb_pdf, "darkred", lw=2,
-                 label="Maxwell-Boltzmann (mode=200 km/s) [TdR p.24]")
+                 label="Maxwell-Boltzmann (mode=200 km/s) [TdR p.31]")
         ax2.set_xlabel("Transversal Velocity v_perp (km/s)")
         ax2.set_ylabel("Probability Density")
-        ax2.set_title("Lens Velocity v_perp [TdR p.24, Rahvar 2015]")
+        ax2.set_title("Lens Velocity v_perp [TdR p.31, Rahvar 2015]")
         ax2.legend()
         fig2.tight_layout()
         velocity_img = _fig_to_b64(fig2)
@@ -588,7 +588,7 @@ def plot_validation_available(data):
         thr_v = _ks_threshold(len(v_perp))
         stats_out.append({
             "parameter": "Lens Velocity v_perp (km/s)",
-            "reference": "TdR p.24 (Rahvar 2015): Maxwell-Boltzmann distribution, mode = 200 km/s",
+            "reference": "TdR p.31 (Rahvar 2015): Maxwell-Boltzmann distribution, mode = 200 km/s",
             "observed": f"KS statistic = {ks_stat_v:.4f} (p = {ks_p_v:.3g}), median = {np.median(v_perp):.1f} km/s",
             "expected": f"Maxwell-Boltzmann shape with mode near 200 km/s (KS stat < {thr_v:.3f})",
             "status": "OK" if ks_stat_v < thr_v else "CHECK",
@@ -633,13 +633,13 @@ def plot_validation_available(data):
                            label="TdR Image 3 peak (q~1.43e-3)")
                 ax.set_xlabel("log10(q)")
                 ax.set_ylabel("Probability Density")
-                ax.set_title("Mass Ratio q [Image 3, p.21]")
+                ax.set_title("Mass Ratio q [Image 3, p.28]")
                 ax.legend()
                 median_q = float(np.median(q_bin))
                 in_range = 1e-4 <= median_q <= 1e-2
                 stats_out.append({
                     "parameter": "Mass Ratio q",
-                    "reference": "TdR Image 3 (p.21): log-normal, median ~1.43e-3 (NASA Exoplanet Archive)",
+                    "reference": "TdR Image 3 (p.28): log-normal, median ~1.43e-3 (NASA Exoplanet Archive)",
                     "observed": f"median = {median_q:.2e}",
                     "expected": "median in [1e-4, 1e-2]",
                     "status": "OK" if in_range else "CHECK",
@@ -680,13 +680,13 @@ def plot_validation_available(data):
                 ax.plot(x_ecc, beta_pdf, "darkblue", lw=2, label="Beta(1.5, 12) [TdR Image 9]")
                 ax.set_xlabel("Orbital Eccentricity e")
                 ax.set_ylabel("Probability Density")
-                ax.set_title("Eccentricity e [Image 9, p.26-27]")
+                ax.set_title("Eccentricity e [Image 9, p.34]")
                 ax.legend()
                 ks_stat_e, ks_p_e = stats.kstest(e_bin, "beta", args=(1.5, 12.0))
                 thr_e = _ks_threshold(len(e_bin))
                 stats_out.append({
                     "parameter": "Orbital Eccentricity e",
-                    "reference": "TdR Image 9 (p.26-27): exponential-like decay, mode ~0.043, modeled as Beta(1.5, 12)",
+                    "reference": "TdR Image 9 (p.34): exponential-like decay, mode ~0.043, modeled as Beta(1.5, 12)",
                     "observed": f"KS statistic = {ks_stat_e:.4f} (p = {ks_p_e:.3g}), median = {np.median(e_bin):.3f}",
                     "expected": f"Beta(1.5, 12) shape, concentrated near 0 (KS stat < {thr_e:.3f})",
                     "status": "OK" if ks_stat_e < thr_e else "CHECK",
@@ -698,16 +698,16 @@ def plot_validation_available(data):
                 ax.hist(alpha_bin, bins=40, density=True, alpha=0.6, color="lightcoral",
                         edgecolor="white", label="Data")
                 ax.axhline(1.0 / (2 * np.pi), color="red", ls="--", lw=1.5,
-                           label="Uniform(0, 2*pi) [TdR p.28]")
+                           label="Uniform(0, 2*pi) [TdR p.34]")
                 ax.set_xlabel("Trajectory Angle alpha_ref (rad)")
                 ax.set_ylabel("Probability Density")
-                ax.set_title("Trajectory Angle alpha_ref [p.28]")
+                ax.set_title("Trajectory Angle alpha_ref [p.34]")
                 ax.legend()
                 ks_stat_a, ks_p_a = stats.kstest(alpha_bin, "uniform", args=(0, 2 * np.pi))
                 thr_a = _ks_threshold(len(alpha_bin))
                 stats_out.append({
                     "parameter": "Trajectory Angle alpha_ref (rad)",
-                    "reference": "TdR p.28: theoretically completely random -> uniform(0, 2*pi)",
+                    "reference": "TdR p.34: theoretically completely random -> uniform(0, 2*pi)",
                     "observed": f"KS statistic = {ks_stat_a:.4f} (p = {ks_p_a:.3g})",
                     "expected": f"Flat (uniform) over [0, 2*pi] (KS stat < {thr_a:.3f})",
                     "status": "OK" if ks_stat_a < thr_a else "CHECK",

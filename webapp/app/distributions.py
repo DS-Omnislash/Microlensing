@@ -1,7 +1,7 @@
 """Parameter sampling distributions for synthetic microlensing events.
 
 All distributions are documented in ``TdR_RocRC.pdf`` (Roc Rubio,
-"Gravitational Microlensing"), section "Parameters distributions" (pp. 20-29).
+"Gravitational Microlensing"), section "Parameters distributions" (pp. 27-36).
 """
 
 import numpy as np
@@ -18,7 +18,7 @@ AU_TO_PC = np.float64(np.pi / 648_000.0)  # 1 AU in parsecs (IAU 2015 Res. B2)
 
 
 def sample_lens_mass(n, rng):
-    """Lens mass M_star [Msun] - bimodal Gaussian mixture (TdR Image 2, p.21).
+    """Lens mass M_star [Msun] - bimodal Gaussian mixture (TdR Image 2, p.27).
 
     Component 1: low-mass peak ~0.10 Msun (M-dwarfs, ~25% weight)
     Component 2: main peak ~0.45 Msun (K/G-dwarfs, ~75% weight)
@@ -39,7 +39,7 @@ def sample_lens_mass(n, rng):
 
 
 def sample_distance_to_lens(n, rng):
-    """Distance to lens D_l [pc] - bulge-peaked mixture (TdR Image 5, p.24).
+    """Distance to lens D_l [pc] - bulge-peaked mixture (TdR Image 5, p.30).
 
     Component 1: Galactic disk lenses (~20%), broad, centered ~1500 pc.
     Component 2: Galactic bulge lenses (~80%), peaked at ~6800 pc.
@@ -60,7 +60,7 @@ def sample_distance_to_lens(n, rng):
 
 
 def sample_lens_source_distance(n, rng):
-    """Lens-source distance D_ls [pc] - structured uniform (TdR Image 4, p.23).
+    """Lens-source distance D_ls [pc] - structured uniform (TdR Image 4, p.29).
 
     Base: uniform [100, 8000] pc (~70%)
     Peak 1: Gaussian at ~1000 pc, sigma=500 (~15%)
@@ -85,7 +85,7 @@ def sample_lens_source_distance(n, rng):
 
 
 def sample_lens_velocity(n, rng):
-    """Transversal lens velocity v_perp [km/s] - Maxwell-Boltzmann (TdR p.25).
+    """Transversal lens velocity v_perp [km/s] - Maxwell-Boltzmann (TdR p.31).
 
     Maxwell-Boltzmann distribution with mode = 200 km/s, i.e.
     sigma = 200 / sqrt(2) ~= 141.42 km/s.
@@ -97,7 +97,7 @@ def sample_lens_velocity(n, rng):
 
 
 def sample_impact_parameter(n, rng):
-    """Impact parameter u0 - truncated exponential (TdR Image 7, p.26).
+    """Impact parameter u0 - truncated exponential (TdR Image 7, p.32).
 
     Models the observed OGLE-IV telescope bias: a strong concentration near
     u0=0 decaying roughly exponentially toward u0=1 (decay rate lambda=3),
@@ -111,7 +111,7 @@ def sample_impact_parameter(n, rng):
 
 
 def sample_mass_ratio(n, rng):
-    """Mass ratio q = m_p / m_star - log-normal (TdR Image 3, p.22).
+    """Mass ratio q = m_p / m_star - log-normal (TdR Image 3, p.28).
 
     q is the ratio of the two bodies' fractional masses,
     m_i = M_i / (M_p + M_star), so it reduces to q = M_planet / M_star --
@@ -194,7 +194,7 @@ def sample_semi_major_axis(n, rng):
 
 
 def sample_eccentricity(n, rng):
-    """Orbital eccentricity e - Beta distribution (TdR Image 9, p.27-28).
+    """Orbital eccentricity e - Beta distribution (TdR Image 9, p.34).
 
     Binary-only. Beta(alpha=1.5, beta=12), mode = (alpha-1)/(alpha+beta-2) ~= 0.043,
     matching the exponential-like decay observed from 0 to 1.
@@ -204,7 +204,7 @@ def sample_eccentricity(n, rng):
 
 
 def sample_trajectory_angle(n, rng):
-    """Trajectory angle alpha_ref [rad] - uniform (TdR p.29).
+    """Trajectory angle alpha_ref [rad] - uniform (TdR p.34).
 
     Binary-only. "Theoretically completely random" -> uniform on [0, 2*pi].
     """

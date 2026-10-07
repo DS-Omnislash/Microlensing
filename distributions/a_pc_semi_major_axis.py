@@ -42,7 +42,7 @@ prints a refreshed copy of that array.
 
 Color: #FFD300 (yellow)
 Reference: NASA Exoplanet Archive (ps table, discoverymethod = 'Microlensing');
-           supersedes the all-methods distribution of TdR_RocRC.pdf Image 8, p.26
+           supersedes the all-methods distribution of TdR_RocRC.pdf Image 8, p.33
 """
 
 import io
